@@ -1,0 +1,6 @@
+
+:root{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e7edf0;background:#080d12;font-synthesis:none;font-weight:400;font-size:14px;--bg:#080d12;--panel:#0c131a;--border:#202a33;--muted:#80909c;--teal:#65e2c0;--amber:#f0b560;--red:#fb7778;--mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace}
+*{box-sizing:border-box}body{margin:0;min-width:360px}button,input,select{font:inherit}button,a,input,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.42}button{color:inherit}button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--teal);outline-offset:4px}button{transition:background .18s,border-color .18s,color .18s}a{color:var(--teal);text-decoration:none}svg{flex-shrink:0}h1,h2,h3,p{margin:0}button{border:0}::selection{background:#65e2c036} .mono{font-family:var(--mono)}
+
+.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

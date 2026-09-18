@@ -1,5 +1,8 @@
 # RailWitness original MRT-inspired exterior
 
+This is the retained v2 three-car asset. The current eight-car workspace uses
+`railwitness-reference-eight.glb`; see [its provenance and topology](REFERENCE_EIGHT.md).
+
 `railwitness-mrt.glb` is an original procedural model authored for this project.
 It contains no downloaded meshes, images, operator logos, or other third-party
 visual assets. It is a stylized metro exterior rather than an engineering model

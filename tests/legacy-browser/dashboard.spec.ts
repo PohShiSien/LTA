@@ -17,9 +17,11 @@ test('overview retains the interactive twin and routes to a distinct investigati
   await page.goto('/');
   await expect(page.locator('.train-scene')).toHaveAttribute('data-ready', 'true');
   await expect(page.getByRole('button', { name: 'Test this prediction' })).toBeInViewport();
+  await expect(page.locator('.overview-deviation')).toContainText('91');
   await expect(page.getByRole('slider', { name: 'Replay cycle' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Select door D08', exact: true }).click();
   await expect(page.locator('.door-chip')).toHaveText('D08');
+  await expect(page.locator('.overview-deviation')).toContainText('not fault probability');
   await expect(page.getByText('No prediction issued for this door', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Door analysis', exact: true }).click();
   await expect(page.getByLabel('Selected door')).toHaveValue('D08');
@@ -58,13 +60,24 @@ test('ledger withholds future evidence, excludes opening, preserves first result
   await expect(firstResult(page)).toContainText('Corroborated');
   await expect(firstResult(page)).toContainText('C007');
   await expect(ledger(page)).toContainText('4.1 A peak');
+  const firstAssessment = ledger(page).locator('.verification-ledger-item').filter({ hasText: 'First assessment' });
+  await expect(firstAssessment.locator('.signal-chart')).toBeVisible();
+  await expect(firstAssessment.locator('.signal-chart__legend')).toContainText('C005');
+  await expect(firstAssessment).toContainText('Inspect Door D07');
+  const verifiedTrace = await firstAssessment.locator('.signal-chart__observed').last().getAttribute('d');
+  expect(verifiedTrace).toBeTruthy();
+  await expect(firstAssessment.locator('.signal-chart__reveal')).toHaveCSS('animation-name', 'signal-wave-reveal');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(firstAssessment.locator('.signal-chart__reveal')).toHaveCSS('animation-name', 'none');
   await page.getByRole('button', { name: 'Reveal next cycle', exact: true }).click();
   await expect(firstResult(page)).toContainText('C007');
   await expect(ledger(page)).toContainText('Follow-up 1');
+  await expect(ledger(page).locator('.verification-ledger-item').filter({ hasText: 'Follow-up 1' }).locator('.signal-chart')).toBeVisible();
   await seek(page, CANDIDATE_CYCLE_INDEX);
   await expect(firstResult(page)).toContainText('Awaiting evidence');
   await expect(ledger(page)).not.toContainText('C007');
   await expect(ledger(page)).not.toContainText('Signature reproduced');
+  await expect(ledger(page).locator('.signal-chart')).toHaveCount(0);
 });
 
 test('missing-data follow-ups recover without rewriting the first insufficient result', async ({ page }) => {
@@ -72,6 +85,8 @@ test('missing-data follow-ups recover without rewriting the first insufficient r
   await page.getByLabel('SYNTHETIC RECORDING').selectOption('insufficient_evidence');
   await page.getByRole('button', { name: 'Reveal next cycle', exact: true }).click();
   await expect(firstResult(page)).toContainText('Insufficient evidence');
+  await expect(ledger(page)).toContainText('Check telemetry completeness');
+  await expect(ledger(page).getByText('MISSING SAMPLES', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Door analysis', exact: true }).click();
   await expect(page.locator('.da-trace-panel .da-outcome')).toHaveText('Cannot assess');
   await expect(page.getByText('MISSING SAMPLES', { exact: true })).toBeVisible();
@@ -95,6 +110,7 @@ test('an isolated high spike fails persistence and explains why', async ({ page 
   await expect(firstResult(page)).toContainText('Not corroborated');
   await expect(ledger(page)).toContainText('persistence criteria were not met');
   await expect(ledger(page)).not.toContainText('stayed within');
+  await expect(ledger(page)).toContainText('Continue monitoring Door D07');
   await page.getByRole('button', { name: 'Door analysis', exact: true }).click();
   await expect(page.locator('.da-trace-panel .da-outcome')).toHaveText('No persistent excess');
   await expect(page.locator('.da-criterion').filter({ hasText: 'Consecutive excess' })).toContainText('1 samples');
@@ -208,6 +224,10 @@ test('all three pages fit mobile and help restores keyboard focus', async ({ pag
     await page.goto(`/#${route}`);
     await expect(page.locator('h1')).toBeVisible();
     if (route === 'overview') await expect(page.locator('.train-scene')).toHaveAttribute('data-ready', 'true');
+    if (route === 'verification') {
+      await page.getByRole('button', { name: 'Reveal next cycle', exact: true }).click();
+      await expect(ledger(page).locator('.signal-chart')).toBeVisible();
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/mobile-${route}.png`, fullPage: true });
   }

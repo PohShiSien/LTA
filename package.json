@@ -1,7 +1,7 @@
 {
   "name": "railwitness",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -9,7 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "model:generate": "node scripts/generate-train.mjs",
+    "model:generate": "node scripts/generate-reference-train.mjs",
     "typecheck": "tsc -b"
   },
   "dependencies": {
@@ -20,7 +20,8 @@
     "lucide-react": "^0.468.0",
     "react": "~19.2.0",
     "react-dom": "~19.2.0",
-    "three": "^0.176.0"
+    "three": "^0.176.0",
+    "fflate": "0.8.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0",

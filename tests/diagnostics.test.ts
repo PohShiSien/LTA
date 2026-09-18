@@ -69,6 +69,42 @@ describe('evidence integrity', () => {
     expect(prediction.verification?.evaluation.qualityIssues.some(issue => issue.includes('chronological'))).toBe(true);
   });
 
+  it('cannot verify a prediction with samples already observed when it was issued', () => {
+    const cycles = createDemoCycles();
+    const candidate = cycles[CANDIDATE_CYCLE_INDEX];
+    const verification = cycles[VERIFICATION_CYCLE_INDEX];
+    verification.telemetry.D07 = verification.telemetry.D07.map((point, index) => ({ ...point, timestamp: candidate.telemetry.D07[index].timestamp }));
+    const snapshot = getReplaySnapshot(cycles, VERIFICATION_CYCLE_INDEX);
+    expect(snapshot.prediction?.status).toBe('insufficient_evidence');
+    expect(snapshot.prediction?.verification?.evaluation.qualityIssues.some(issue => issue.includes('previous movement'))).toBe(true);
+    expect(snapshot.doors.find(door => door.id === 'D07')?.dataQuality).toBe('insufficient_evidence');
+    const later = getReplaySnapshot(cycles, VERIFICATION_CYCLE_INDEX + 2).prediction!;
+    expect(later.status).toBe('insufficient_evidence');
+    expect(later.latestAttempt?.status).toBe('corroborated');
+  });
+
+  it('rejects even a partial overlap with the preceding movement', () => {
+    const cycles = createDemoCycles();
+    const verification = cycles[VERIFICATION_CYCLE_INDEX];
+    verification.telemetry.D07[0].timestamp = cycles[VERIFICATION_CYCLE_INDEX - 1].timestamp;
+    const snapshot = getReplaySnapshot(cycles, VERIFICATION_CYCLE_INDEX);
+    expect(snapshot.prediction?.verification?.evaluation).toMatchObject({ coveragePct: 100, sufficientEvidence: false, signaturePresent: false });
+    expect(snapshot.prediction?.status).toBe('insufficient_evidence');
+  });
+
+  it('withholds historical durations and candidate predictions for stale movement samples', () => {
+    const cycles = createDemoCycles();
+    const candidate = cycles[CANDIDATE_CYCLE_INDEX];
+    const earlier = cycles[CANDIDATE_CYCLE_INDEX - 2];
+    candidate.telemetry.D07 = candidate.telemetry.D07.map((point, index) => ({ ...point, timestamp: earlier.telemetry.D07[index].timestamp }));
+    const visible = cycles.slice(0, CANDIDATE_CYCLE_INDEX + 1);
+    const history = getDoorHistory(visible, 'D07');
+    expect(history[history.length - 1]).toMatchObject({ durationMs: null, evaluation: { sufficientEvidence: false, signaturePresent: false } });
+    const snapshot = getReplaySnapshot(cycles, CANDIDATE_CYCLE_INDEX);
+    expect(snapshot.prediction).toBeNull();
+    expect(snapshot.doors.find(door => door.id === 'D07')?.status).toBe('insufficient_evidence');
+  });
+
   it('reports the actual persistence criteria and does not call a spike within-envelope', () => {
     const cycles = createDemoCycles('isolated_spike');
     const prediction = getReplaySnapshot(cycles, VERIFICATION_CYCLE_INDEX).prediction!;

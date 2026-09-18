@@ -87,7 +87,12 @@ function MRTExterior({ onReady }: { onReady: () => void }) {
     });
     return copy;
   }, [scene]);
-  return <primitive object={model} />;
+  // Opaque train surfaces must participate in pointer hit-testing. Without
+  // this blocker, the event system can select a far-side door through the shell.
+  return <primitive object={model}
+    onPointerOver={(event: ThreeEvent<PointerEvent>) => event.stopPropagation()}
+    onClick={(event: ThreeEvent<MouseEvent>) => event.stopPropagation()}
+  />;
 }
 
 function DoorZone({ door, selected, status, onSelect, reducedMotion }: {

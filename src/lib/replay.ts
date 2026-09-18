@@ -34,7 +34,7 @@ export function evaluateTrace(
   points: readonly DoorTelemetryPoint[],
   regionStartPct = REGION_START_PCT,
   regionEndPct = REGION_END_PCT,
-  context?: { cycleId: string; doorId: string; direction: 'open' | 'close'; timestamp: number; chronologyValid?: boolean },
+  context?: { cycleId: string; doorId: string; direction: 'open' | 'close'; timestamp: number; chronologyValid?: boolean; previousCycleTimestamp?: number },
 ): TraceEvaluation {
   const qualityIssues: string[] = [];
   let validMetadata = true;
@@ -52,6 +52,10 @@ export function evaluateTrace(
     || (index > 0 && point.timestamp <= points[index - 1].timestamp)
     || (context && point.timestamp > context.timestamp))) {
     reject('Sample timestamps are out of order or later than movement completion.');
+  }
+  if (context?.previousCycleTimestamp !== undefined && (!Number.isFinite(context.previousCycleTimestamp)
+    || points.some(point => point.timestamp <= context.previousCycleTimestamp!))) {
+    reject('Sample timestamps overlap a previous movement; evidence must be newer than its completion.');
   }
   if (points.some(point => !Number.isFinite(point.travelPct) || point.travelPct < 0 || point.travelPct > 100
     || Math.abs(point.travelPct / SAMPLE_STEP_PCT - Math.round(point.travelPct / SAMPLE_STEP_PCT)) > 0.000001)) {
@@ -124,9 +128,9 @@ export function evaluateTrace(
 }
 
 /** Bind sample metadata to the actual movement, rather than trusting the sample itself. */
-export function evaluateCycleTrace(cycle: TelemetryCycle, doorId: string, chronologyValid = true): TraceEvaluation {
+export function evaluateCycleTrace(cycle: TelemetryCycle, doorId: string, chronologyValid = true, previousCycleTimestamp?: number): TraceEvaluation {
   return evaluateTrace(getDoorTelemetry(cycle, doorId), REGION_START_PCT, REGION_END_PCT, {
-    cycleId: cycle.id, doorId, direction: cycle.direction, timestamp: cycle.timestamp, chronologyValid,
+    cycleId: cycle.id, doorId, direction: cycle.direction, timestamp: cycle.timestamp, chronologyValid, previousCycleTimestamp,
   });
 }
 
@@ -157,14 +161,14 @@ function makePrediction(cycle: TelemetryCycle, doorId: string): RailWitnessPredi
 /** Accept only already-visible cycles. Opening movements cannot resolve a closing prediction. */
 export function derivePrediction(visibleCycles: readonly TelemetryCycle[], doorId = ANOMALY_DOOR_ID): RailWitnessPrediction | null {
   const issuedIndex = visibleCycles.findIndex((cycle, index) => cycle.direction === 'close'
-    && evaluateCycleTrace(cycle, doorId, validCycleChronology(visibleCycles, index)).signaturePresent);
+    && evaluateCycleTrace(cycle, doorId, validCycleChronology(visibleCycles, index), visibleCycles[index - 1]?.timestamp).signaturePresent);
   if (issuedIndex < 0) return null;
   const prediction = makePrediction(visibleCycles[issuedIndex], doorId);
   const attempts: VerificationEvidence[] = [];
   for (let index = issuedIndex + 1; index < visibleCycles.length; index++) {
     const cycle = visibleCycles[index];
     if (cycle.direction !== prediction.targetDirection) continue;
-    const evaluation = evaluateCycleTrace(cycle, doorId, validCycleChronology(visibleCycles, index));
+    const evaluation = evaluateCycleTrace(cycle, doorId, validCycleChronology(visibleCycles, index), visibleCycles[index - 1]?.timestamp);
     const status: VerificationOutcome = !evaluation.sufficientEvidence
       ? 'insufficient_evidence'
       : evaluation.signaturePresent ? 'corroborated' : 'not_corroborated';
@@ -205,7 +209,7 @@ export function getReplaySnapshot(cycles: readonly TelemetryCycle[], requestedIn
   const prediction = predictions.find(item => item.doorId === ANOMALY_DOOR_ID) ?? predictions[0] ?? null;
   const predictionByDoor = new Map(predictions.map(item => [item.doorId, item]));
   const doors: DoorHealth[] = DOOR_IDS.map((id, index) => {
-    const evaluation = evaluateCycleTrace(currentCycle, id, validCycleChronology(visibleCycles, currentIndex));
+    const evaluation = evaluateCycleTrace(currentCycle, id, validCycleChronology(visibleCycles, currentIndex), visibleCycles[currentIndex - 1]?.timestamp);
     const doorPrediction = predictionByDoor.get(id);
     const latestStatus = doorPrediction?.latestAttempt?.status ?? doorPrediction?.status;
     // Current data loss is visible immediately; otherwise fleet state follows the latest eligible assessment.

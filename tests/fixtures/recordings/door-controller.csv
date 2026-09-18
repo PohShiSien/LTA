@@ -1,0 +1,4 @@
+Datetime,Motor current(mA),Motor Voltage(10mV),Motor electrodynamic force,Door opening time(.1s),Door closing time(.1s),Close command,Open command,DCSR,DCSL,DLSR,DLSL,Door Opened,Door Locked,Door is opening,Door is closing,Door leaf position
+2023-7-5-0-0-0-0,121,400,64,23,35,1,0,0,0,0,0,0,0,0,1,700
+2023-7-5-0-0-0-20,150,600,112,23,35,1,0,0,0,0,0,0,0,0,1,700
+2023-7-5-0-0-0-40,232,800,121,23,35,1,0,0,0,0,0,0,0,0,1,699

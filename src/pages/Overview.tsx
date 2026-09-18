@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Activity, ArrowRight, Fingerprint, Focus, Info, LoaderCircle, ListFilter } from 'lucide-react';
-import { evaluateCycleTrace, formatDirection, formatDoorStatus, getDoorTelemetry } from '../lib/replay';
+import { formatDirection, formatDoorStatus, getDoorTelemetry } from '../lib/replay';
+import { getDoorHistory } from '../lib/diagnostics';
 import type { DemoScenario, DoorStatus, RailWitnessPrediction, ReplaySnapshot } from '../types/railwitness';
 import { SignalChart } from '../components/telemetry/SignalChart';
 import { PredictionCard } from '../components/railwitness/PredictionCard';
@@ -24,7 +25,7 @@ interface Props {
 export function Overview({snapshot,prediction,selectedDoor,scenario,revealing,resetKey,canReveal,onSelectDoor,onResetView,onAnalyze,onVerification,revealNext}: Props) {
   const currentDoor = snapshot.doors.find(door => door.id === selectedDoor)!;
   const points = getDoorTelemetry(snapshot.currentCycle, selectedDoor);
-  const evaluation = evaluateCycleTrace(snapshot.currentCycle, selectedDoor);
+  const evaluation = getDoorHistory(snapshot.visibleCycles, selectedDoor).at(-1)!.evaluation;
   const doorStatuses = Object.fromEntries(snapshot.doors.map(door => [door.id, door.status]));
   const candidateCycle = prediction ? snapshot.visibleCycles.find(cycle => cycle.id === prediction.issuedCycleId) : undefined;
   const comparisonCycle = snapshot.currentCycle.direction === 'close' && prediction?.verification && candidateCycle?.id !== snapshot.currentCycle.id ? candidateCycle : undefined;
@@ -36,6 +37,7 @@ export function Overview({snapshot,prediction,selectedDoor,scenario,revealing,re
     <div className="chart-box"><SignalChart syntheticEnvelope points={points} comparisonPoints={comparisonCycle ? getDoorTelemetry(comparisonCycle, selectedDoor) : undefined} comparisonLabel="Prediction cycle" doorId={selectedDoor} cycleId={snapshot.currentCycle.id} revealKey={`${snapshot.currentCycle.id}-${scenario}-${selectedDoor}`} /></div>
     {comparisonCycle && <p className="comparison-caption">Comparison: recorded prediction cycle {comparisonCycle.id} · {comparisonCycle.timestampLabel} SGT</p>}
     <div className="signal-footer"><div className="signal-stat"><span>EXPECTED AT 60–80%</span><strong>{evaluation.expectedMinimum?.toFixed(1) ?? '—'}–{evaluation.expectedMaximum?.toFixed(1) ?? '—'}<small>A</small></strong></div><div className="signal-stat"><span>OBSERVED PEAK IN REGION</span><strong className={evaluation.signaturePresent ? 'warning' : ''}>{evaluation.peakCurrent?.toFixed(1) ?? '—'}<small>A</small></strong></div><div className="signal-stat"><span>{evaluation.sufficientEvidence ? 'ABOVE UPPER ENVELOPE' : 'INTERVAL COMPLETENESS'}</span><strong className={evaluation.signaturePresent || !evaluation.sufficientEvidence ? 'warning' : ''}>{evaluation.sufficientEvidence ? `+${evaluation.deviationPct?.toFixed(0) ?? '0'}%` : `${evaluation.coveragePct}%`}</strong></div></div>
+    <p className="overview-deviation">Deviation index <strong>{evaluation.sufficientEvidence ? evaluation.anomalyScore : '—'}<small> / 100</small></strong><span>Illustrative signal score · not fault probability</span></p>
   </section>;
 
   return <><section className="panel hero-panel" aria-label="Train digital twin"><div className="digital-twin"><div className="hero-heading"><div><div className="eyebrow">FLEET DIGITAL TWIN</div><h2>Train 017 <span style={{ color: '#4d6370', fontWeight: 400 }}> / </span><span style={{ color: '#a1b1bb', fontWeight: 400, fontSize: 14 }}> NSL</span></h2><p className="train-subtitle"><span className="line-tag">NS</span>North–South Line<span style={{ color: '#445c6a' }}>·</span>3-car demonstration model</p></div><span className="live-twin"><span className="status-dot" />DIGITAL TWIN</span></div><div className="scene-wrap"><Suspense fallback={<div className="loading-scene"><LoaderCircle className="spin" size={24} />Loading digital twin</div>}><TrainScene selectedDoor={selectedDoor} onSelectDoor={onSelectDoor} doorStatuses={doorStatuses} resetKey={resetKey} /></Suspense></div><div className="hero-bottom"><div className="legend"><span><i />Normal</span><span><i className="warning" />Candidate</span><span><i className="critical" />Corroborated</span></div><button className="icon-button scene-reset" aria-label="Reset train view" title="Reset view" onClick={() => onResetView()}><Focus size={14} /></button></div></div>

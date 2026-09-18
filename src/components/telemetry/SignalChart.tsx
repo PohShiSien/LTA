@@ -120,8 +120,9 @@ export function SignalChart({
   const tooltipX = activePoint ? Math.max(LEFT + 4, Math.min(WIDTH - tooltipWidth - RIGHT, x(activePoint.travelPct) + (activePoint.travelPct > 64 ? -tooltipWidth - 13 : 13))) : 0
   const tooltipY = activePoint ? Math.max(top + 2, Math.min(bottom - tooltipHeight - 5, y(activePoint.current ?? activePoint.expectedMedian) - tooltipHeight / 2)) : 0
   const missingSamples = regionSamples.filter((point) => point.current === null).length
+  const envelopeDescription = syntheticEnvelope ? 'synthetic reference envelope' : 'healthy envelope'
   const summary = samples.length
-    ? `${doorId}, cycle ${cycleId}. Motor current across ${samples[0].travelPct} to ${samples[samples.length - 1].travelPct} percent door travel. ${hasAnomaly ? `Observed current exceeds the healthy envelope in the ${regionStart} to ${regionEnd} percent inspection region.` : missingSamples ? `${missingSamples} current samples are missing in the inspection region; this trace is incomplete.` : 'Observed current does not exceed the healthy envelope in the inspection region.'}${comparison.length ? ` The dashed purple trace shows ${comparisonLabel}.` : ''}${comparison.some((point) => point.current === null) ? ' Missing comparison samples appear as gaps.' : ''}`
+    ? `${doorId}, cycle ${cycleId}. Motor current across ${samples[0].travelPct} to ${samples[samples.length - 1].travelPct} percent door travel. ${hasAnomaly ? `Observed current exceeds the ${envelopeDescription} in the ${regionStart} to ${regionEnd} percent inspection region.` : missingSamples ? `${missingSamples} current samples are missing in the inspection region; this trace is incomplete.` : `Observed current does not exceed the ${envelopeDescription} in the inspection region.`}${comparison.length ? ` The dashed purple trace shows ${comparisonLabel}.` : ''}${comparison.some((point) => point.current === null) ? ' Missing comparison samples appear as gaps.' : ''}`
     : `${doorId}, cycle ${cycleId}. No usable current samples are available.`
 
   function moveCursor(event: PointerEvent<SVGSVGElement>) {

@@ -1,5 +1,7 @@
 # Telemetry and verification contract
 
+> Historical v2 synthetic adapter contract — the current uploaded-data workspace uses `src/types/multisystem.ts`, [MULTISYSTEM_BRIEF.md](MULTISYSTEM_BRIEF.md), and [TRAINED_MODELS.md](TRAINED_MODELS.md). The synthetic-only statements and future-cycle rules below apply to retained door-demonstration modules, not v3 recorded-data inference.
+
 RailWitness runs on deterministic synthetic telemetry. It has no live LTA connection, measured train data, trained anomaly model, or operational maintenance integration. Assessments demonstrate signal investigation and prediction review; they do not establish mechanical condition.
 
 ## Data and adapter boundary
@@ -51,7 +53,7 @@ Integrity checks require:
 - Finite, nonnegative current, with explicit nulls treated as missing.
 - Valid, ordered envelope bounds with the median inside.
 - Consistent door, cycle, and direction metadata.
-- Strictly increasing sample timestamps; no sample later than completion when cycle context is supplied.
+- Strictly increasing sample timestamps; no sample later than completion when cycle context is supplied. When an earlier movement exists, every sample must be newer than its completion: stale or overlapping observations cannot verify a later prediction.
 - Unique, increasing travel positions on the 2% grid from 0% to 100%.
 - Unique movement IDs and chronological completion times in observed history.
 

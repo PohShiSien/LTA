@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { ArrowRight, Check, CircleDashed, ClipboardCheck, Clock3, FileCheck2, FlaskConical, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { ReplayTimeline } from '../components/replay/ReplayTimeline';
+import { SignalChart } from '../components/telemetry/SignalChart';
 import { ANOMALY_DOOR_ID, CANDIDATE_CYCLE_INDEX, SCENARIOS } from '../data/mockTelemetry';
 import { runValidationSuite } from '../lib/diagnostics';
-import { evaluateTrace, formatDirection, getDoorTelemetry } from '../lib/replay';
+import { evaluateCycleTrace, evaluateTrace, formatDirection, getDoorTelemetry } from '../lib/replay';
 import type { DemoScenario, PredictionStatus, RailWitnessPrediction, ReplayAction, ReplayState, TelemetryCycle, TraceEvaluation, VerificationEvidence } from '../types/railwitness';
 import './Verification.css';
 
@@ -40,13 +41,44 @@ function EvaluationSummary({ evaluation }: { evaluation: TraceEvaluation }) {
   </div>;
 }
 
-function Assessment({ evidence, first }: { evidence: VerificationEvidence; first: boolean }) {
-  return <details className="verification-assessment" open={first}>
-    <summary><span>Assessment details</span><span>{evidence.evaluation.sampleCount} / {evidence.evaluation.requiredSampleCount} interval samples</span></summary>
+function Assessment({ evidence, first, latest, cycle, issuingCycle, prediction }: {
+  evidence: VerificationEvidence;
+  first: boolean;
+  latest: boolean;
+  cycle: TelemetryCycle;
+  issuingCycle: TelemetryCycle | undefined;
+  prediction: RailWitnessPrediction;
+}) {
+  const recommendation = first ? prediction.recommendation
+    : evidence.status === 'corroborated'
+      ? `Inspect Door ${prediction.doorId} under the applicable maintenance procedure. This recurring signal does not establish a confirmed mechanical fault.`
+      : evidence.status === 'not_corroborated'
+        ? `Continue monitoring Door ${prediction.doorId}. One non-recurrence does not establish mechanical condition.`
+        : `Check telemetry completeness for Door ${prediction.doorId} and collect another eligible ${prediction.targetDirection === 'close' ? 'closing' : 'opening'} movement before assessing the prediction.`;
+  return <details className="verification-assessment" open={latest} data-cycle-id={cycle.id} data-latest={latest || undefined}>
+    <summary><span>{first ? 'First assessment' : 'Follow-up assessment'} · signal & criteria</span><span>{evidence.evaluation.sampleCount} / {evidence.evaluation.requiredSampleCount} interval samples</span></summary>
+    <section className="verification-assessment-signal" aria-label={`${prediction.doorId} ${cycle.id} verification waveform`}>
+      <div className="verification-signal-heading"><h3>Received waveform</h3><span>{cycle.id} · {cycle.timestampLabel} SGT</span></div>
+      <SignalChart
+        syntheticEnvelope
+        points={getDoorTelemetry(cycle, prediction.doorId)}
+        comparisonPoints={issuingCycle ? getDoorTelemetry(issuingCycle, prediction.doorId) : undefined}
+        comparisonLabel={issuingCycle ? `Prediction · ${issuingCycle.id}` : 'Prediction cycle'}
+        doorId={prediction.doorId}
+        cycleId={cycle.id}
+        anomalyRegion={{ start: prediction.regionStartPct, end: prediction.regionEndPct }}
+        revealKey={`${cycle.id}-${prediction.doorId}`}
+      />
+      {issuingCycle && <p className="verification-signal-caption">Dashed comparison: the observed signal at prediction issue, {issuingCycle.timestampLabel} SGT. Both movements are within the evidence cutoff.</p>}
+    </section>
     <EvaluationSummary evaluation={evidence.evaluation} />
     <div className="verification-consecutive"><span>Longest consecutive run</span><strong>{evidence.evaluation.maxConsecutiveExcess} samples</strong><span>≥3 required</span></div>
     <p className="verification-reason">{evidence.summary}</p>
     {evidence.evaluation.qualityIssues.length > 0 && <ul className="verification-quality-issues">{evidence.evaluation.qualityIssues.map(issue => <li key={issue}>{issue}</li>)}</ul>}
+    <div className={`verification-recommendation verification-recommendation--${evidence.status}`} role="note" aria-label={`${first ? 'First' : 'Follow-up'} assessment recommendation`}>
+      <ShieldCheck size={15} aria-hidden="true" />
+      <div><span>{first ? 'FIRST ASSESSMENT' : 'THIS FOLLOW-UP'} · RECOMMENDED ACTION</span><p>{recommendation}</p></div>
+    </div>
     <p className="verification-rule">A recurring signature requires sufficient coverage, at least 3 consecutive exceedances, and ≥60% of observed interval samples above the envelope.</p>
   </details>;
 }
@@ -76,6 +108,7 @@ function PredictionRecord({ prediction, selectedDoor }: { prediction: RailWitnes
 function EvidenceLedger({ visibleCycles, prediction, selectedDoor }: Pick<VerificationProps, 'visibleCycles' | 'prediction' | 'selectedDoor'>) {
   const attempts = prediction?.attempts ?? [];
   const issuedIndex = prediction ? visibleCycles.findIndex(cycle => cycle.id === prediction.issuedCycleId) : -1;
+  const issuingCycle = issuedIndex >= 0 ? visibleCycles[issuedIndex] : undefined;
   const historyLength = issuedIndex >= 0 ? issuedIndex : Math.max(0, visibleCycles.length - 3);
   const renderMovement = (cycle: TelemetryCycle, index: number) => {
         const isIssue = cycle.id === prediction?.issuedCycleId;
@@ -86,14 +119,21 @@ function EvidenceLedger({ visibleCycles, prediction, selectedDoor }: Pick<Verifi
           : attempt ? attemptIndex === 0 ? 'First eligible closing movement after the prediction was issued.' : 'Later eligible movement. Retained as follow-up evidence; original result preserved.'
             : prediction && index > issuedIndex ? `${formatDirection(cycle.direction)} movement does not match the predicted ${prediction.targetDirection === 'close' ? 'closing' : 'opening'} direction.`
               : prediction ? 'Observed before the prediction was issued; not verification evidence.' : 'Monitoring only. No prediction had been issued for this door.';
-        const detectionEvaluation = isIssue ? evaluateTrace(getDoorTelemetry(cycle, selectedDoor), prediction?.regionStartPct, prediction?.regionEndPct) : null;
+        const detectionEvaluation = isIssue ? evaluateTrace(getDoorTelemetry(cycle, selectedDoor), prediction?.regionStartPct, prediction?.regionEndPct, {
+          cycleId: cycle.id,
+          doorId: selectedDoor,
+          direction: cycle.direction,
+          timestamp: cycle.timestamp,
+          previousCycleTimestamp: visibleCycles[index - 1]?.timestamp,
+          chronologyValid: visibleCycles.slice(0, index).every(previous => previous.timestamp < cycle.timestamp && previous.id !== cycle.id),
+        }) : null;
         return <li key={cycle.id} className={`verification-ledger-item ${isIssue ? 'is-issue' : attempt ? 'is-assessed' : 'is-excluded'}`}>
           <div className="verification-ledger-marker" aria-hidden="true">{isIssue ? <LockKeyhole size={12} /> : attempt ? <Check size={13} /> : <span />}</div>
           <div className="verification-ledger-content">
             <div className="verification-ledger-row"><div className="verification-movement"><strong>{cycle.id}</strong><span>{formatDirection(cycle.direction)}</span><time>{cycle.timestampLabel}</time></div><span className={`verification-ledger-role ${isIssue ? 'issued' : ''}`}>{!prediction ? 'Monitoring' : label}</span></div>
             <p>{reason}</p>
-            {isIssue && detectionEvaluation && <div className="verification-detection"><span>60–80% travel</span><span>{detectionEvaluation.peakCurrent?.toFixed(2)} A peak</span><span>{detectionEvaluation.coveragePct}% coverage</span></div>}
-            {attempt && <><Outcome status={attempt.status} /><Assessment evidence={attempt} first={attemptIndex === 0} /></>}
+            {isIssue && detectionEvaluation && <div className="verification-detection"><span>{prediction?.regionStartPct}–{prediction?.regionEndPct}% travel</span><span>{detectionEvaluation.peakCurrent?.toFixed(2)} A peak</span><span>{detectionEvaluation.coveragePct}% coverage</span></div>}
+            {attempt && prediction && <><Outcome status={attempt.status} /><Assessment evidence={attempt} first={attemptIndex === 0} latest={attemptIndex === attempts.length - 1} cycle={cycle} issuingCycle={issuingCycle} prediction={prediction} /></>}
           </div>
         </li>;
   };
@@ -107,8 +147,8 @@ function EvidenceLedger({ visibleCycles, prediction, selectedDoor }: Pick<Verifi
   </section>;
 }
 
-function FuturePreview({ cycle, selectedDoor }: { cycle: TelemetryCycle | undefined; selectedDoor: string }) {
-  const evaluation = cycle ? evaluateTrace(getDoorTelemetry(cycle, selectedDoor)) : null;
+function FuturePreview({ cycle, previousCycle, selectedDoor }: { cycle: TelemetryCycle | undefined; previousCycle: TelemetryCycle | undefined; selectedDoor: string }) {
+  const evaluation = cycle ? evaluateCycleTrace(cycle, selectedDoor, !previousCycle || (cycle.timestamp > previousCycle.timestamp && cycle.id !== previousCycle.id), previousCycle?.timestamp) : null;
   return <section className="verification-future-preview" aria-label="Future preview, not assessed"><div><span className="eyebrow">FUTURE PREVIEW · NOT ASSESSED</span><h3>{cycle ? `${cycle.id} · ${formatDirection(cycle.direction)} · ${cycle.timestampLabel} SGT` : 'No later movements in this recording'}</h3><p>Preview signals are outside the evidence cutoff. Reveal the cycle to add it to the chronological record.</p></div>{evaluation && <dl><div><dt>Interval peak</dt><dd>{evaluation.peakCurrent?.toFixed(2) ?? '—'} A</dd></div><div><dt>Interval coverage</dt><dd>{evaluation.coveragePct}%</dd></div></dl>}</section>;
 }
 
@@ -143,8 +183,8 @@ export function Verification({ visibleCycles, prediction, selectedDoor, state, c
     </section>
     {cycles.length > 0 && <ReplayTimeline state={state} cycles={cycles} dispatch={dispatch} disabled={revealing} />}
     <div className="verification-cutoff"><div><span className="verification-door-label">{selectedDoor}</span><Clock3 size={13} /><p>Evidence cutoff <strong>{currentCycle ? `${currentCycle.id} · ${currentCycle.timestampLabel} SGT` : 'No revealed movements'}</strong></p></div><div className="verification-cutoff-actions">{selectedDoor === ANOMALY_DOOR_ID && state.currentIndex < CANDIDATE_CYCLE_INDEX && cycles.length > CANDIDATE_CYCLE_INDEX && <button className="button ghost" disabled={revealing} onClick={() => dispatch({ type: 'seek', index: CANDIDATE_CYCLE_INDEX })}>Jump to detection</button>}<button className="button primary" onClick={onReveal} disabled={revealing || !canReveal}>{revealing ? 'Revealing evidence…' : canReveal ? 'Reveal next cycle' : 'Recording complete'}<ArrowRight size={13} /></button></div></div>
-    {!state.hideFutureData && <FuturePreview cycle={cycles[state.currentIndex + 1]} selectedDoor={selectedDoor} />}
-    <div className="verification-audit-grid"><PredictionRecord prediction={prediction} selectedDoor={selectedDoor} /><EvidenceLedger visibleCycles={visibleCycles} prediction={prediction} selectedDoor={selectedDoor} /></div>
+    {!state.hideFutureData && <FuturePreview cycle={cycles[state.currentIndex + 1]} previousCycle={currentCycle} selectedDoor={selectedDoor} />}
+    <div className="verification-audit-grid"><PredictionRecord prediction={prediction} selectedDoor={selectedDoor} /><EvidenceLedger key={selectedDoor} visibleCycles={visibleCycles} prediction={prediction} selectedDoor={selectedDoor} /></div>
     <details className="verification-provenance"><summary><LockKeyhole size={13} /><span>Provenance & chronology rules</span></summary><div><p><strong>Observed data only.</strong> The prediction and ledger are derived from movements up to the replay cursor. Seeking backward reconstructs the earlier evidence state. The future-preview setting does not add evidence to this ledger.</p><p><strong>Eligibility.</strong> Detection is excluded from verification. Later movements must match the predicted direction. Each eligible movement is retained, including insufficient-data attempts; follow-ups never replace the original first assessment.</p><p><strong>Demonstration provenance.</strong> Signals and healthy envelopes are generated fixtures. This browser demo reconstructs records in memory; it does not provide a signed audit trail or a server-enforced data cutoff.</p></div></details>
     <ValidationSuite />
   </div>;

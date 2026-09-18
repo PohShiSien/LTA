@@ -26,11 +26,13 @@ export interface DoorHistoryEntry {
 export function getDoorHistory(visibleCycles: readonly TelemetryCycle[], doorId: string): DoorHistoryEntry[] {
   return visibleCycles.map((cycle, index) => {
     const points = getDoorTelemetry(cycle, doorId);
+    const previousCycleTimestamp = visibleCycles[index - 1]?.timestamp;
     const chronologyValid = visibleCycles.slice(0, index).every(previous => previous.timestamp < cycle.timestamp && previous.id !== cycle.id);
-    const evaluation = evaluateCycleTrace(cycle, doorId, chronologyValid);
+    const evaluation = evaluateCycleTrace(cycle, doorId, chronologyValid, previousCycleTimestamp);
     const completeMovement = points[0]?.travelPct === 0 && points[points.length - 1]?.travelPct === 100;
     const validTimes = points.length > 1 && points.every((point, sampleIndex) => Number.isFinite(point.timestamp)
       && point.timestamp <= cycle.timestamp
+      && (previousCycleTimestamp === undefined || point.timestamp > previousCycleTimestamp)
       && (sampleIndex === 0 || point.timestamp > points[sampleIndex - 1].timestamp));
     return {
       cycle,
