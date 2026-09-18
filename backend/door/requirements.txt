@@ -1,0 +1,9 @@
+# Tested with Python 3.13.5. Keep these versions when loading the bundled model.
+numpy==2.3.5
+scipy==1.17.0
+scikit-learn==1.8.0
+joblib==1.5.3
+threadpoolctl==3.6.0
+fastapi==0.128.2
+uvicorn==0.48.0
+python-multipart==0.0.29

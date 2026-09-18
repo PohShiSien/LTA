@@ -1,5 +1,5 @@
 import modelArtifacts from '../data/modelArtifacts.json';
-import type { AnalysisResult, CellValue, DoorSegment, ModelInfo, RailClass, Recording, Subsystem } from '../types/multisystem';
+import type { AnalysisResult, CellValue, ModelInfo, RailClass, Recording, Subsystem } from '../types/multisystem';
 
 interface PortableTree { left: number[]; right: number[]; feature: number[]; threshold: number[]; value: number[][] }
 interface Artifact {
@@ -64,6 +64,7 @@ export function evaluatePortableModel(artifact: Artifact, features: readonly num
 }
 
 export function getTrainedModel(subsystem: Subsystem): Artifact {
+  if (subsystem === 'door') throw new Error('Uploaded Door prediction requires the frozen Python backend.');
   const model = models[subsystem];
   if (!model) throw new Error(`The fitted ${subsystem.toUpperCase()} model artifact is unavailable. No substitute prediction has been generated.`);
   return model;
@@ -130,57 +131,6 @@ export function shmFeatures(recording: Recording): number[] {
   return features.map(value => Math.log1p(Math.abs(value)));
 }
 
-export function doorTimestamp(value: CellValue): number {
-  if (typeof value !== 'string') throw new Error('Door inference requires recorded native or ISO timestamp strings.');
-  const native = /^(\d{4})-(\d{1,2})-(\d{1,2})-(\d{1,2})-(\d{1,2})-(\d{1,2})-(\d{1,3})$/.exec(value);
-  const timestamp = native ? Date.UTC(Number(native[1]), Number(native[2]) - 1, Number(native[3]), Number(native[4]), Number(native[5]), Number(native[6]), Number(native[7])) : Date.parse(value);
-  if (!Number.isFinite(timestamp)) throw new Error(`Unrecognized door timestamp: ${value}`);
-  return timestamp / 1000;
-}
-
-const DOOR_COLUMNS = ['Motor current(mA)', 'Motor Voltage(10mV)', 'Motor electrodynamic force', 'Door opening time(.1s)', 'Door closing time(.1s)', 'Close command', 'Open command', 'DCSR', 'DCSL', 'DLSR', 'DLSL', 'Door Opened', 'Door Locked', 'Door is opening', 'Door is closing', 'Door leaf position'];
-
-function canonicalDoorRows(recording: Recording): CellValue[][] {
-  const indexes = DOOR_COLUMNS.map(name => recording.headers.indexOf(name));
-  if (indexes.some(index => index < 0) || recording.timeColumnIndex === undefined) throw new Error('The fitted Door model requires the documented controller fields and timestamp column.');
-  return recording.rows.map((row, rowIndex) => [row[recording.timeColumnIndex!], ...indexes.map((index) => {
-    const value = numeric(row[index]);
-    if (value === null) throw new Error(`Door row ${rowIndex + 1}, field ${recording.headers[index]} is missing or non-numeric.`);
-    return value;
-  })]);
-}
-
-export function doorFeatures(rows: CellValue[][]): number[] {
-  const features = [rows.length, doorTimestamp(rows[rows.length - 1][0]) - doorTimestamp(rows[0][0])];
-  for (const index of [1, 2, 3, 4, 5, 14, 15, 16]) features.push(...summarizeSignal(rows.map(row => numeric(row[index]))));
-  const start = Number(rows[0][16]);
-  const span = Math.max(Math.abs(Number(rows[rows.length - 1][16]) - start), 1);
-  for (const low of [0, .2, .4, .6, .8]) {
-    const values = rows.filter(row => {
-      const travel = Math.abs(Number(row[16]) - start) / span;
-      return travel >= low && (low === .8 ? travel <= low + .2 : travel < low + .2);
-    }).map(row => Number(row[1]));
-    const s = summarizeSignal(values); features.push(s[0], s[4]);
-  }
-  return features;
-}
-
-function analyseDoor(recording: Recording, model: Artifact): DoorSegment[] {
-  const rows = canonicalDoorRows(recording);
-  const times = rows.map(row => doorTimestamp(row[0]));
-  if (times.some((time, index) => index > 0 && time <= times[index - 1])) throw new Error('Door samples must be strictly chronological; reorder or repair the source recording before analysis.');
-  const starts = [0];
-  for (let index = 1; index < times.length; index++) if (times[index] - times[index - 1] > model.gapSeconds!) starts.push(index);
-  return starts.map((start, index) => {
-    const end = index + 1 < starts.length ? starts[index + 1] - 1 : rows.length - 1;
-    const scores = evaluatePortableModel(model, doorFeatures(rows.slice(start, end + 1)));
-    const classIndex = scores.indexOf(Math.max(...scores));
-    const prediction = model.classes![classIndex];
-    if (prediction !== 'Normal' && prediction !== 'Abnormal resistance') throw new Error('The Door model returned an unsupported class.');
-    return { start_time: String(rows[start][0]), end_time: String(rows[end][0]), prediction, startIndex: start, endIndex: end };
-  });
-}
-
 interface AcvSignal { indoor: number | null; target: number | null; outdoor: number | null; cooling: boolean; valid: boolean }
 
 export function acvFeatures(recording: Recording, aliases = getTrainedModel('acv').aliases!): { cars: string[]; features: number[][] } {
@@ -226,10 +176,10 @@ export function acvFeatures(recording: Recording, aliases = getTrainedModel('acv
 export async function analyseRecording(recording: Recording): Promise<AnalysisResult> {
   if (!recording.rows.length) throw new Error('There are no recorded samples to analyse.');
   const subsystem = recording.source.subsystem;
+  if (subsystem === 'door') throw new Error('Uploaded Door prediction requires the frozen Python backend.');
   const model = getTrainedModel(subsystem);
   const base = { source: { ...recording.source }, model: model.info, analysedAt: new Date().toISOString() };
   switch (subsystem) {
-    case 'door': return { ...base, subsystem, scope: 'cycle', segments: analyseDoor(recording, model), notes: ['Predicted cycle boundaries use the fitted acquisition-gap rule. Classification uses measured controller signals; no synthetic healthy envelope or future-cycle corroboration is used.', 'Gap-based segmentation is validated on the supplied acquisition pattern; a continuously sampled stream without inter-cycle gaps needs a different segmenter.'] };
     case 'rail': {
       const scores = evaluatePortableModel(model, railFeatures(recording));
       const prediction = model.classes![scores.indexOf(Math.max(...scores))];
@@ -242,7 +192,7 @@ export async function analyseRecording(recording: Recording): Promise<AnalysisRe
       const faultyClass = model.classes!.indexOf('1');
       if (faultyClass < 0) throw new Error('The ACV ranking artifact lacks its trained positive class.');
       const ranked = cars.map((car, index) => ({ car, score: evaluatePortableModel(model, features[index])[faultyClass] })).sort((a, b) => b.score - a.score || a.car.localeCompare(b.car));
-      return { ...base, subsystem, scope: 'car-case', rankedCars: ranked.map(item => item.car), notes: ['Ranking is derived from the complete case. Car identifiers remain exactly as supplied; geometry order is independent of rank.', 'Internal learned ranking scores are not calibrated fault probabilities. Only six labelled training cases are available; inspect the validation limits.'] };
+      return { ...base, subsystem, scope: 'car-case', rankedCars: ranked.map(item => item.car), scores: Object.fromEntries(ranked.map(item => [item.car, item.score])), notes: ['Ranking is derived from the complete case. Car identifiers remain exactly as supplied; geometry order is independent of rank.', 'Internal learned ranking scores are not calibrated fault probabilities. Only six labelled training cases are available; inspect the validation limits.'] };
     }
   }
 }

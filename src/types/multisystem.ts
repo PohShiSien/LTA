@@ -56,6 +56,8 @@ export interface DoorSegment {
   prediction: 'Normal' | 'Abnormal resistance';
   startIndex: number;
   endIndex: number;
+  /** Recorded movement flags, when the source adapter supplies them. Not an asset identity. */
+  operation?: 'Open' | 'Close';
 }
 export interface ModelInfo {
   version: string;

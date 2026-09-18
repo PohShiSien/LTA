@@ -1,0 +1,38 @@
+{
+  "train_rows": 18036,
+  "train_columns": 17,
+  "labelled_cycles": 110,
+  "class_counts": {
+    "Normal": 80,
+    "Abnormal resistance": 30
+  },
+  "operation_status_counts": {
+    "Close / Normal": 40,
+    "Open / Normal": 40,
+    "Open / Abnormal resistance": 15,
+    "Close / Abnormal resistance": 15
+  },
+  "within_cycle_sample_intervals_ms": [
+    20
+  ],
+  "between_cycle_gaps_ms_min_max": [
+    10215,
+    58823
+  ],
+  "exact_duplicate_sensor_cycles": 0,
+  "missing_sensor_values": 0,
+  "asset_identifiers_present": false,
+  "engineered_features": 97,
+  "effective_features_after_constant_removal": 96,
+  "timestamps_preserved": true,
+  "all_ground_truth_rows_reconciled": true,
+  "limits": [
+    "Only 110 labelled cycles.",
+    "No car/door/run identifiers, so unseen-door/run validation is impossible.",
+    "No exact duplicate cycles found; near-duplicates or common acquisition sessions remain possible.",
+    "Timing-gap rule exploits the documented supplied-stream format and needs redesign for an uninterrupted live feed.",
+    "No test ground truth available.",
+    "Classifier outputs are uncalibrated.",
+    "No future-failure or next-cycle forecast is trained."
+  ]
+}

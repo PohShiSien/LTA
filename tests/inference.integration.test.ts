@@ -6,13 +6,12 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { acvFeatures, analyseRecording, doorFeatures, railFeatures, shmFeatures } from '../src/lib/inference';
+import { acvFeatures, analyseRecording, railFeatures, shmFeatures } from '../src/lib/inference';
 import { parseRecording } from '../src/lib/recordings';
 import type { Subsystem } from '../src/types/multisystem';
 
 const datasetRoot = process.env.RAILWITNESS_DATASETS;
 const cases: { subsystem: Subsystem; path: string; fileName: string }[] = [
-  { subsystem: 'door', path: 'Door/Test.csv', fileName: 'Test.csv' },
   { subsystem: 'rail', path: 'Rail_Corrugation/Test/Test1.csv', fileName: 'Test1.csv' },
   { subsystem: 'shm', path: 'SHM/Test/test01.csv', fileName: 'test01.csv' },
   { subsystem: 'acv', path: 'ACV/Test/acv_test_case.xlsx', fileName: 'acv_test_case.xlsx' },
@@ -39,8 +38,7 @@ describe.runIf(Boolean(datasetRoot))('actual uploaded files: Python CLI / browse
         expect(result.source.mode).toBe('uploaded');
         expect(result.model.name.toLowerCase()).not.toContain('synthetic');
         if (result.subsystem === 'door') {
-          expect(result.segments.map(({ start_time, end_time, prediction }) => ({ start_time, end_time, prediction }))).toEqual(expected.predictions);
-          result.segments.forEach((segment, index) => compareFeatures(doorFeatures(recording.rows.slice(segment.startIndex, segment.endIndex + 1)), expected.features[index]));
+          throw new Error('Door must use the frozen Python backend');
         } else if (result.subsystem === 'rail') {
           compareFeatures(railFeatures(recording), expected.features);
           expect(result.prediction).toBe(expected.prediction);

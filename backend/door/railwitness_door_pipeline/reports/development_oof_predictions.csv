@@ -1,0 +1,477 @@
+model,fold,start_time,end_time,prediction
+majority_baseline,1,2023-7-5-0-11-42-400,2023-7-5-0-11-45-220,Normal
+majority_baseline,1,2023-7-5-0-12-17-355,2023-7-5-0-12-20-215,Normal
+majority_baseline,1,2023-7-5-0-13-19-38,2023-7-5-0-13-22-718,Normal
+majority_baseline,1,2023-7-5-0-13-40-783,2023-7-5-0-13-43-543,Normal
+majority_baseline,1,2023-7-5-0-14-37-719,2023-7-5-0-14-40-539,Normal
+majority_baseline,1,2023-7-5-0-15-37-485,2023-7-5-0-15-40-325,Normal
+majority_baseline,1,2023-7-5-0-15-58-428,2023-7-5-0-16-1-288,Normal
+majority_baseline,1,2023-7-5-0-16-53-605,2023-7-5-0-16-56-385,Normal
+majority_baseline,1,2023-7-5-0-17-6-600,2023-7-5-0-17-10-280,Normal
+majority_baseline,1,2023-7-5-0-18-5-449,2023-7-5-0-18-9-169,Normal
+majority_baseline,1,2023-7-5-0-18-34-44,2023-7-5-0-18-37-724,Normal
+majority_baseline,1,2023-7-5-0-19-30-17,2023-7-5-0-19-32-817,Normal
+majority_baseline,1,2023-7-5-0-20-23-918,2023-7-5-0-20-26-758,Normal
+majority_baseline,1,2023-7-5-0-21-20-453,2023-7-5-0-21-24-133,Normal
+majority_baseline,1,2023-7-5-0-22-16-540,2023-7-5-0-22-19-400,Normal
+majority_baseline,1,2023-7-5-0-22-46-759,2023-7-5-0-22-50-439,Normal
+majority_baseline,1,2023-7-5-0-23-18-200,2023-7-5-0-23-21-980,Normal
+majority_baseline,2,2023-7-5-0-24-11-124,2023-7-5-0-24-13-944,Normal
+majority_baseline,2,2023-7-5-0-25-10-422,2023-7-5-0-25-13-282,Normal
+majority_baseline,2,2023-7-5-0-25-50-832,2023-7-5-0-25-53-652,Normal
+majority_baseline,2,2023-7-5-0-26-38-238,2023-7-5-0-26-41-998,Normal
+majority_baseline,2,2023-7-5-0-26-53-854,2023-7-5-0-26-56-654,Normal
+majority_baseline,2,2023-7-5-0-27-40-473,2023-7-5-0-27-43-333,Normal
+majority_baseline,2,2023-7-5-0-28-20-800,2023-7-5-0-28-23-620,Normal
+majority_baseline,2,2023-7-5-0-28-51-275,2023-7-5-0-28-55-35,Normal
+majority_baseline,2,2023-7-5-0-29-31-944,2023-7-5-0-29-34-724,Normal
+majority_baseline,2,2023-7-5-0-30-26-664,2023-7-5-0-30-30-364,Normal
+majority_baseline,2,2023-7-5-0-30-43-983,2023-7-5-0-30-46-803,Normal
+majority_baseline,2,2023-7-5-0-31-3-745,2023-7-5-0-31-6-545,Normal
+majority_baseline,2,2023-7-5-0-31-59-892,2023-7-5-0-32-3-672,Normal
+majority_baseline,2,2023-7-5-0-32-43-694,2023-7-5-0-32-47-374,Normal
+majority_baseline,2,2023-7-5-0-33-29-832,2023-7-5-0-33-33-552,Normal
+majority_baseline,2,2023-7-5-0-34-11-718,2023-7-5-0-34-15-418,Normal
+majority_baseline,2,2023-7-5-0-34-44-96,2023-7-5-0-34-47-796,Normal
+majority_baseline,3,2023-7-5-0-35-1-654,2023-7-5-0-35-4-394,Normal
+majority_baseline,3,2023-7-5-0-35-40-152,2023-7-5-0-35-43-932,Normal
+majority_baseline,3,2023-7-5-0-36-41-950,2023-7-5-0-36-45-630,Normal
+majority_baseline,3,2023-7-5-0-37-13-423,2023-7-5-0-37-17-143,Normal
+majority_baseline,3,2023-7-5-0-37-39-851,2023-7-5-0-37-43-551,Normal
+majority_baseline,3,2023-7-5-0-38-15-897,2023-7-5-0-38-19-597,Normal
+majority_baseline,3,2023-7-5-0-39-11-422,2023-7-5-0-39-15-122,Normal
+majority_baseline,3,2023-7-5-0-39-40-660,2023-7-5-0-39-44-400,Normal
+majority_baseline,3,2023-7-5-0-40-22-964,2023-7-5-0-40-25-764,Normal
+majority_baseline,3,2023-7-5-0-41-6-213,2023-7-5-0-41-8-993,Normal
+majority_baseline,3,2023-7-5-0-41-59-719,2023-7-5-0-42-2-539,Normal
+majority_baseline,3,2023-7-5-0-42-42-84,2023-7-5-0-42-44-964,Normal
+majority_baseline,3,2023-7-5-0-43-27-797,2023-7-5-0-43-30-637,Normal
+majority_baseline,3,2023-7-5-0-44-14-353,2023-7-5-0-44-17-133,Normal
+majority_baseline,3,2023-7-5-0-45-5-208,2023-7-5-0-45-8-928,Normal
+majority_baseline,3,2023-7-5-0-45-39-906,2023-7-5-0-45-42-726,Normal
+majority_baseline,3,2023-7-5-0-46-11-961,2023-7-5-0-46-15-661,Normal
+majority_baseline,4,2023-7-5-0-46-55-304,2023-7-5-0-46-58-64,Normal
+majority_baseline,4,2023-7-5-0-47-26-875,2023-7-5-0-47-29-695,Normal
+majority_baseline,4,2023-7-5-0-47-46-274,2023-7-5-0-47-49-974,Normal
+majority_baseline,4,2023-7-5-0-48-25-883,2023-7-5-0-48-29-583,Normal
+majority_baseline,4,2023-7-5-0-49-0-735,2023-7-5-0-49-4-415,Normal
+majority_baseline,4,2023-7-5-0-49-41-413,2023-7-5-0-49-44-253,Normal
+majority_baseline,4,2023-7-5-0-50-34-415,2023-7-5-0-50-37-255,Normal
+majority_baseline,4,2023-7-5-0-51-23-833,2023-7-5-0-51-26-653,Normal
+majority_baseline,4,2023-7-5-0-51-54-106,2023-7-5-0-51-57-786,Normal
+majority_baseline,4,2023-7-5-0-52-32-643,2023-7-5-0-52-35-423,Normal
+majority_baseline,4,2023-7-5-0-53-1-0,2023-7-5-0-53-4-740,Normal
+majority_baseline,4,2023-7-5-0-53-43-39,2023-7-5-0-53-46-799,Normal
+majority_baseline,4,2023-7-5-0-54-11-580,2023-7-5-0-54-15-280,Normal
+majority_baseline,4,2023-7-5-0-54-41-12,2023-7-5-0-54-44-712,Normal
+majority_baseline,4,2023-7-5-0-55-30-889,2023-7-5-0-55-34-569,Normal
+majority_baseline,4,2023-7-5-0-55-57-621,2023-7-5-0-56-1-301,Normal
+majority_baseline,4,2023-7-5-0-56-13-678,2023-7-5-0-56-17-338,Normal
+decision_stump,1,2023-7-5-0-11-42-400,2023-7-5-0-11-45-220,Normal
+decision_stump,1,2023-7-5-0-12-17-355,2023-7-5-0-12-20-215,Normal
+decision_stump,1,2023-7-5-0-13-19-38,2023-7-5-0-13-22-718,Normal
+decision_stump,1,2023-7-5-0-13-40-783,2023-7-5-0-13-43-543,Normal
+decision_stump,1,2023-7-5-0-14-37-719,2023-7-5-0-14-40-539,Normal
+decision_stump,1,2023-7-5-0-15-37-485,2023-7-5-0-15-40-325,Normal
+decision_stump,1,2023-7-5-0-15-58-428,2023-7-5-0-16-1-288,Abnormal resistance
+decision_stump,1,2023-7-5-0-16-53-605,2023-7-5-0-16-56-385,Normal
+decision_stump,1,2023-7-5-0-17-6-600,2023-7-5-0-17-10-280,Normal
+decision_stump,1,2023-7-5-0-18-5-449,2023-7-5-0-18-9-169,Abnormal resistance
+decision_stump,1,2023-7-5-0-18-34-44,2023-7-5-0-18-37-724,Normal
+decision_stump,1,2023-7-5-0-19-30-17,2023-7-5-0-19-32-817,Normal
+decision_stump,1,2023-7-5-0-20-23-918,2023-7-5-0-20-26-758,Normal
+decision_stump,1,2023-7-5-0-21-20-453,2023-7-5-0-21-24-133,Normal
+decision_stump,1,2023-7-5-0-22-16-540,2023-7-5-0-22-19-400,Normal
+decision_stump,1,2023-7-5-0-22-46-759,2023-7-5-0-22-50-439,Normal
+decision_stump,1,2023-7-5-0-23-18-200,2023-7-5-0-23-21-980,Abnormal resistance
+decision_stump,2,2023-7-5-0-24-11-124,2023-7-5-0-24-13-944,Normal
+decision_stump,2,2023-7-5-0-25-10-422,2023-7-5-0-25-13-282,Normal
+decision_stump,2,2023-7-5-0-25-50-832,2023-7-5-0-25-53-652,Normal
+decision_stump,2,2023-7-5-0-26-38-238,2023-7-5-0-26-41-998,Normal
+decision_stump,2,2023-7-5-0-26-53-854,2023-7-5-0-26-56-654,Normal
+decision_stump,2,2023-7-5-0-27-40-473,2023-7-5-0-27-43-333,Normal
+decision_stump,2,2023-7-5-0-28-20-800,2023-7-5-0-28-23-620,Normal
+decision_stump,2,2023-7-5-0-28-51-275,2023-7-5-0-28-55-35,Normal
+decision_stump,2,2023-7-5-0-29-31-944,2023-7-5-0-29-34-724,Normal
+decision_stump,2,2023-7-5-0-30-26-664,2023-7-5-0-30-30-364,Normal
+decision_stump,2,2023-7-5-0-30-43-983,2023-7-5-0-30-46-803,Abnormal resistance
+decision_stump,2,2023-7-5-0-31-3-745,2023-7-5-0-31-6-545,Normal
+decision_stump,2,2023-7-5-0-31-59-892,2023-7-5-0-32-3-672,Normal
+decision_stump,2,2023-7-5-0-32-43-694,2023-7-5-0-32-47-374,Normal
+decision_stump,2,2023-7-5-0-33-29-832,2023-7-5-0-33-33-552,Abnormal resistance
+decision_stump,2,2023-7-5-0-34-11-718,2023-7-5-0-34-15-418,Normal
+decision_stump,2,2023-7-5-0-34-44-96,2023-7-5-0-34-47-796,Normal
+decision_stump,3,2023-7-5-0-35-1-654,2023-7-5-0-35-4-394,Abnormal resistance
+decision_stump,3,2023-7-5-0-35-40-152,2023-7-5-0-35-43-932,Normal
+decision_stump,3,2023-7-5-0-36-41-950,2023-7-5-0-36-45-630,Normal
+decision_stump,3,2023-7-5-0-37-13-423,2023-7-5-0-37-17-143,Abnormal resistance
+decision_stump,3,2023-7-5-0-37-39-851,2023-7-5-0-37-43-551,Normal
+decision_stump,3,2023-7-5-0-38-15-897,2023-7-5-0-38-19-597,Normal
+decision_stump,3,2023-7-5-0-39-11-422,2023-7-5-0-39-15-122,Normal
+decision_stump,3,2023-7-5-0-39-40-660,2023-7-5-0-39-44-400,Abnormal resistance
+decision_stump,3,2023-7-5-0-40-22-964,2023-7-5-0-40-25-764,Abnormal resistance
+decision_stump,3,2023-7-5-0-41-6-213,2023-7-5-0-41-8-993,Normal
+decision_stump,3,2023-7-5-0-41-59-719,2023-7-5-0-42-2-539,Normal
+decision_stump,3,2023-7-5-0-42-42-84,2023-7-5-0-42-44-964,Abnormal resistance
+decision_stump,3,2023-7-5-0-43-27-797,2023-7-5-0-43-30-637,Normal
+decision_stump,3,2023-7-5-0-44-14-353,2023-7-5-0-44-17-133,Normal
+decision_stump,3,2023-7-5-0-45-5-208,2023-7-5-0-45-8-928,Abnormal resistance
+decision_stump,3,2023-7-5-0-45-39-906,2023-7-5-0-45-42-726,Normal
+decision_stump,3,2023-7-5-0-46-11-961,2023-7-5-0-46-15-661,Normal
+decision_stump,4,2023-7-5-0-46-55-304,2023-7-5-0-46-58-64,Normal
+decision_stump,4,2023-7-5-0-47-26-875,2023-7-5-0-47-29-695,Normal
+decision_stump,4,2023-7-5-0-47-46-274,2023-7-5-0-47-49-974,Normal
+decision_stump,4,2023-7-5-0-48-25-883,2023-7-5-0-48-29-583,Abnormal resistance
+decision_stump,4,2023-7-5-0-49-0-735,2023-7-5-0-49-4-415,Normal
+decision_stump,4,2023-7-5-0-49-41-413,2023-7-5-0-49-44-253,Normal
+decision_stump,4,2023-7-5-0-50-34-415,2023-7-5-0-50-37-255,Abnormal resistance
+decision_stump,4,2023-7-5-0-51-23-833,2023-7-5-0-51-26-653,Normal
+decision_stump,4,2023-7-5-0-51-54-106,2023-7-5-0-51-57-786,Normal
+decision_stump,4,2023-7-5-0-52-32-643,2023-7-5-0-52-35-423,Normal
+decision_stump,4,2023-7-5-0-53-1-0,2023-7-5-0-53-4-740,Abnormal resistance
+decision_stump,4,2023-7-5-0-53-43-39,2023-7-5-0-53-46-799,Normal
+decision_stump,4,2023-7-5-0-54-11-580,2023-7-5-0-54-15-280,Normal
+decision_stump,4,2023-7-5-0-54-41-12,2023-7-5-0-54-44-712,Abnormal resistance
+decision_stump,4,2023-7-5-0-55-30-889,2023-7-5-0-55-34-569,Normal
+decision_stump,4,2023-7-5-0-55-57-621,2023-7-5-0-56-1-301,Normal
+decision_stump,4,2023-7-5-0-56-13-678,2023-7-5-0-56-17-338,Normal
+logistic_regression,1,2023-7-5-0-11-42-400,2023-7-5-0-11-45-220,Normal
+logistic_regression,1,2023-7-5-0-12-17-355,2023-7-5-0-12-20-215,Normal
+logistic_regression,1,2023-7-5-0-13-19-38,2023-7-5-0-13-22-718,Normal
+logistic_regression,1,2023-7-5-0-13-40-783,2023-7-5-0-13-43-543,Normal
+logistic_regression,1,2023-7-5-0-14-37-719,2023-7-5-0-14-40-539,Normal
+logistic_regression,1,2023-7-5-0-15-37-485,2023-7-5-0-15-40-325,Normal
+logistic_regression,1,2023-7-5-0-15-58-428,2023-7-5-0-16-1-288,Abnormal resistance
+logistic_regression,1,2023-7-5-0-16-53-605,2023-7-5-0-16-56-385,Normal
+logistic_regression,1,2023-7-5-0-17-6-600,2023-7-5-0-17-10-280,Normal
+logistic_regression,1,2023-7-5-0-18-5-449,2023-7-5-0-18-9-169,Abnormal resistance
+logistic_regression,1,2023-7-5-0-18-34-44,2023-7-5-0-18-37-724,Normal
+logistic_regression,1,2023-7-5-0-19-30-17,2023-7-5-0-19-32-817,Normal
+logistic_regression,1,2023-7-5-0-20-23-918,2023-7-5-0-20-26-758,Normal
+logistic_regression,1,2023-7-5-0-21-20-453,2023-7-5-0-21-24-133,Normal
+logistic_regression,1,2023-7-5-0-22-16-540,2023-7-5-0-22-19-400,Normal
+logistic_regression,1,2023-7-5-0-22-46-759,2023-7-5-0-22-50-439,Normal
+logistic_regression,1,2023-7-5-0-23-18-200,2023-7-5-0-23-21-980,Abnormal resistance
+logistic_regression,2,2023-7-5-0-24-11-124,2023-7-5-0-24-13-944,Normal
+logistic_regression,2,2023-7-5-0-25-10-422,2023-7-5-0-25-13-282,Normal
+logistic_regression,2,2023-7-5-0-25-50-832,2023-7-5-0-25-53-652,Normal
+logistic_regression,2,2023-7-5-0-26-38-238,2023-7-5-0-26-41-998,Normal
+logistic_regression,2,2023-7-5-0-26-53-854,2023-7-5-0-26-56-654,Normal
+logistic_regression,2,2023-7-5-0-27-40-473,2023-7-5-0-27-43-333,Normal
+logistic_regression,2,2023-7-5-0-28-20-800,2023-7-5-0-28-23-620,Normal
+logistic_regression,2,2023-7-5-0-28-51-275,2023-7-5-0-28-55-35,Normal
+logistic_regression,2,2023-7-5-0-29-31-944,2023-7-5-0-29-34-724,Normal
+logistic_regression,2,2023-7-5-0-30-26-664,2023-7-5-0-30-30-364,Normal
+logistic_regression,2,2023-7-5-0-30-43-983,2023-7-5-0-30-46-803,Abnormal resistance
+logistic_regression,2,2023-7-5-0-31-3-745,2023-7-5-0-31-6-545,Normal
+logistic_regression,2,2023-7-5-0-31-59-892,2023-7-5-0-32-3-672,Normal
+logistic_regression,2,2023-7-5-0-32-43-694,2023-7-5-0-32-47-374,Normal
+logistic_regression,2,2023-7-5-0-33-29-832,2023-7-5-0-33-33-552,Abnormal resistance
+logistic_regression,2,2023-7-5-0-34-11-718,2023-7-5-0-34-15-418,Normal
+logistic_regression,2,2023-7-5-0-34-44-96,2023-7-5-0-34-47-796,Normal
+logistic_regression,3,2023-7-5-0-35-1-654,2023-7-5-0-35-4-394,Abnormal resistance
+logistic_regression,3,2023-7-5-0-35-40-152,2023-7-5-0-35-43-932,Normal
+logistic_regression,3,2023-7-5-0-36-41-950,2023-7-5-0-36-45-630,Normal
+logistic_regression,3,2023-7-5-0-37-13-423,2023-7-5-0-37-17-143,Abnormal resistance
+logistic_regression,3,2023-7-5-0-37-39-851,2023-7-5-0-37-43-551,Normal
+logistic_regression,3,2023-7-5-0-38-15-897,2023-7-5-0-38-19-597,Normal
+logistic_regression,3,2023-7-5-0-39-11-422,2023-7-5-0-39-15-122,Normal
+logistic_regression,3,2023-7-5-0-39-40-660,2023-7-5-0-39-44-400,Abnormal resistance
+logistic_regression,3,2023-7-5-0-40-22-964,2023-7-5-0-40-25-764,Abnormal resistance
+logistic_regression,3,2023-7-5-0-41-6-213,2023-7-5-0-41-8-993,Normal
+logistic_regression,3,2023-7-5-0-41-59-719,2023-7-5-0-42-2-539,Normal
+logistic_regression,3,2023-7-5-0-42-42-84,2023-7-5-0-42-44-964,Abnormal resistance
+logistic_regression,3,2023-7-5-0-43-27-797,2023-7-5-0-43-30-637,Normal
+logistic_regression,3,2023-7-5-0-44-14-353,2023-7-5-0-44-17-133,Normal
+logistic_regression,3,2023-7-5-0-45-5-208,2023-7-5-0-45-8-928,Abnormal resistance
+logistic_regression,3,2023-7-5-0-45-39-906,2023-7-5-0-45-42-726,Normal
+logistic_regression,3,2023-7-5-0-46-11-961,2023-7-5-0-46-15-661,Normal
+logistic_regression,4,2023-7-5-0-46-55-304,2023-7-5-0-46-58-64,Normal
+logistic_regression,4,2023-7-5-0-47-26-875,2023-7-5-0-47-29-695,Normal
+logistic_regression,4,2023-7-5-0-47-46-274,2023-7-5-0-47-49-974,Normal
+logistic_regression,4,2023-7-5-0-48-25-883,2023-7-5-0-48-29-583,Abnormal resistance
+logistic_regression,4,2023-7-5-0-49-0-735,2023-7-5-0-49-4-415,Normal
+logistic_regression,4,2023-7-5-0-49-41-413,2023-7-5-0-49-44-253,Normal
+logistic_regression,4,2023-7-5-0-50-34-415,2023-7-5-0-50-37-255,Abnormal resistance
+logistic_regression,4,2023-7-5-0-51-23-833,2023-7-5-0-51-26-653,Normal
+logistic_regression,4,2023-7-5-0-51-54-106,2023-7-5-0-51-57-786,Normal
+logistic_regression,4,2023-7-5-0-52-32-643,2023-7-5-0-52-35-423,Abnormal resistance
+logistic_regression,4,2023-7-5-0-53-1-0,2023-7-5-0-53-4-740,Abnormal resistance
+logistic_regression,4,2023-7-5-0-53-43-39,2023-7-5-0-53-46-799,Normal
+logistic_regression,4,2023-7-5-0-54-11-580,2023-7-5-0-54-15-280,Normal
+logistic_regression,4,2023-7-5-0-54-41-12,2023-7-5-0-54-44-712,Abnormal resistance
+logistic_regression,4,2023-7-5-0-55-30-889,2023-7-5-0-55-34-569,Normal
+logistic_regression,4,2023-7-5-0-55-57-621,2023-7-5-0-56-1-301,Normal
+logistic_regression,4,2023-7-5-0-56-13-678,2023-7-5-0-56-17-338,Normal
+rbf_svm,1,2023-7-5-0-11-42-400,2023-7-5-0-11-45-220,Normal
+rbf_svm,1,2023-7-5-0-12-17-355,2023-7-5-0-12-20-215,Normal
+rbf_svm,1,2023-7-5-0-13-19-38,2023-7-5-0-13-22-718,Normal
+rbf_svm,1,2023-7-5-0-13-40-783,2023-7-5-0-13-43-543,Normal
+rbf_svm,1,2023-7-5-0-14-37-719,2023-7-5-0-14-40-539,Normal
+rbf_svm,1,2023-7-5-0-15-37-485,2023-7-5-0-15-40-325,Normal
+rbf_svm,1,2023-7-5-0-15-58-428,2023-7-5-0-16-1-288,Abnormal resistance
+rbf_svm,1,2023-7-5-0-16-53-605,2023-7-5-0-16-56-385,Normal
+rbf_svm,1,2023-7-5-0-17-6-600,2023-7-5-0-17-10-280,Normal
+rbf_svm,1,2023-7-5-0-18-5-449,2023-7-5-0-18-9-169,Abnormal resistance
+rbf_svm,1,2023-7-5-0-18-34-44,2023-7-5-0-18-37-724,Normal
+rbf_svm,1,2023-7-5-0-19-30-17,2023-7-5-0-19-32-817,Normal
+rbf_svm,1,2023-7-5-0-20-23-918,2023-7-5-0-20-26-758,Normal
+rbf_svm,1,2023-7-5-0-21-20-453,2023-7-5-0-21-24-133,Normal
+rbf_svm,1,2023-7-5-0-22-16-540,2023-7-5-0-22-19-400,Normal
+rbf_svm,1,2023-7-5-0-22-46-759,2023-7-5-0-22-50-439,Normal
+rbf_svm,1,2023-7-5-0-23-18-200,2023-7-5-0-23-21-980,Abnormal resistance
+rbf_svm,2,2023-7-5-0-24-11-124,2023-7-5-0-24-13-944,Normal
+rbf_svm,2,2023-7-5-0-25-10-422,2023-7-5-0-25-13-282,Normal
+rbf_svm,2,2023-7-5-0-25-50-832,2023-7-5-0-25-53-652,Normal
+rbf_svm,2,2023-7-5-0-26-38-238,2023-7-5-0-26-41-998,Normal
+rbf_svm,2,2023-7-5-0-26-53-854,2023-7-5-0-26-56-654,Normal
+rbf_svm,2,2023-7-5-0-27-40-473,2023-7-5-0-27-43-333,Normal
+rbf_svm,2,2023-7-5-0-28-20-800,2023-7-5-0-28-23-620,Normal
+rbf_svm,2,2023-7-5-0-28-51-275,2023-7-5-0-28-55-35,Normal
+rbf_svm,2,2023-7-5-0-29-31-944,2023-7-5-0-29-34-724,Normal
+rbf_svm,2,2023-7-5-0-30-26-664,2023-7-5-0-30-30-364,Normal
+rbf_svm,2,2023-7-5-0-30-43-983,2023-7-5-0-30-46-803,Abnormal resistance
+rbf_svm,2,2023-7-5-0-31-3-745,2023-7-5-0-31-6-545,Normal
+rbf_svm,2,2023-7-5-0-31-59-892,2023-7-5-0-32-3-672,Normal
+rbf_svm,2,2023-7-5-0-32-43-694,2023-7-5-0-32-47-374,Normal
+rbf_svm,2,2023-7-5-0-33-29-832,2023-7-5-0-33-33-552,Abnormal resistance
+rbf_svm,2,2023-7-5-0-34-11-718,2023-7-5-0-34-15-418,Normal
+rbf_svm,2,2023-7-5-0-34-44-96,2023-7-5-0-34-47-796,Normal
+rbf_svm,3,2023-7-5-0-35-1-654,2023-7-5-0-35-4-394,Abnormal resistance
+rbf_svm,3,2023-7-5-0-35-40-152,2023-7-5-0-35-43-932,Normal
+rbf_svm,3,2023-7-5-0-36-41-950,2023-7-5-0-36-45-630,Normal
+rbf_svm,3,2023-7-5-0-37-13-423,2023-7-5-0-37-17-143,Abnormal resistance
+rbf_svm,3,2023-7-5-0-37-39-851,2023-7-5-0-37-43-551,Normal
+rbf_svm,3,2023-7-5-0-38-15-897,2023-7-5-0-38-19-597,Normal
+rbf_svm,3,2023-7-5-0-39-11-422,2023-7-5-0-39-15-122,Normal
+rbf_svm,3,2023-7-5-0-39-40-660,2023-7-5-0-39-44-400,Abnormal resistance
+rbf_svm,3,2023-7-5-0-40-22-964,2023-7-5-0-40-25-764,Abnormal resistance
+rbf_svm,3,2023-7-5-0-41-6-213,2023-7-5-0-41-8-993,Normal
+rbf_svm,3,2023-7-5-0-41-59-719,2023-7-5-0-42-2-539,Normal
+rbf_svm,3,2023-7-5-0-42-42-84,2023-7-5-0-42-44-964,Abnormal resistance
+rbf_svm,3,2023-7-5-0-43-27-797,2023-7-5-0-43-30-637,Normal
+rbf_svm,3,2023-7-5-0-44-14-353,2023-7-5-0-44-17-133,Normal
+rbf_svm,3,2023-7-5-0-45-5-208,2023-7-5-0-45-8-928,Abnormal resistance
+rbf_svm,3,2023-7-5-0-45-39-906,2023-7-5-0-45-42-726,Normal
+rbf_svm,3,2023-7-5-0-46-11-961,2023-7-5-0-46-15-661,Normal
+rbf_svm,4,2023-7-5-0-46-55-304,2023-7-5-0-46-58-64,Normal
+rbf_svm,4,2023-7-5-0-47-26-875,2023-7-5-0-47-29-695,Normal
+rbf_svm,4,2023-7-5-0-47-46-274,2023-7-5-0-47-49-974,Normal
+rbf_svm,4,2023-7-5-0-48-25-883,2023-7-5-0-48-29-583,Abnormal resistance
+rbf_svm,4,2023-7-5-0-49-0-735,2023-7-5-0-49-4-415,Normal
+rbf_svm,4,2023-7-5-0-49-41-413,2023-7-5-0-49-44-253,Normal
+rbf_svm,4,2023-7-5-0-50-34-415,2023-7-5-0-50-37-255,Abnormal resistance
+rbf_svm,4,2023-7-5-0-51-23-833,2023-7-5-0-51-26-653,Normal
+rbf_svm,4,2023-7-5-0-51-54-106,2023-7-5-0-51-57-786,Normal
+rbf_svm,4,2023-7-5-0-52-32-643,2023-7-5-0-52-35-423,Abnormal resistance
+rbf_svm,4,2023-7-5-0-53-1-0,2023-7-5-0-53-4-740,Abnormal resistance
+rbf_svm,4,2023-7-5-0-53-43-39,2023-7-5-0-53-46-799,Normal
+rbf_svm,4,2023-7-5-0-54-11-580,2023-7-5-0-54-15-280,Normal
+rbf_svm,4,2023-7-5-0-54-41-12,2023-7-5-0-54-44-712,Abnormal resistance
+rbf_svm,4,2023-7-5-0-55-30-889,2023-7-5-0-55-34-569,Normal
+rbf_svm,4,2023-7-5-0-55-57-621,2023-7-5-0-56-1-301,Normal
+rbf_svm,4,2023-7-5-0-56-13-678,2023-7-5-0-56-17-338,Normal
+random_forest,1,2023-7-5-0-11-42-400,2023-7-5-0-11-45-220,Normal
+random_forest,1,2023-7-5-0-12-17-355,2023-7-5-0-12-20-215,Normal
+random_forest,1,2023-7-5-0-13-19-38,2023-7-5-0-13-22-718,Normal
+random_forest,1,2023-7-5-0-13-40-783,2023-7-5-0-13-43-543,Normal
+random_forest,1,2023-7-5-0-14-37-719,2023-7-5-0-14-40-539,Normal
+random_forest,1,2023-7-5-0-15-37-485,2023-7-5-0-15-40-325,Normal
+random_forest,1,2023-7-5-0-15-58-428,2023-7-5-0-16-1-288,Abnormal resistance
+random_forest,1,2023-7-5-0-16-53-605,2023-7-5-0-16-56-385,Normal
+random_forest,1,2023-7-5-0-17-6-600,2023-7-5-0-17-10-280,Normal
+random_forest,1,2023-7-5-0-18-5-449,2023-7-5-0-18-9-169,Abnormal resistance
+random_forest,1,2023-7-5-0-18-34-44,2023-7-5-0-18-37-724,Normal
+random_forest,1,2023-7-5-0-19-30-17,2023-7-5-0-19-32-817,Normal
+random_forest,1,2023-7-5-0-20-23-918,2023-7-5-0-20-26-758,Normal
+random_forest,1,2023-7-5-0-21-20-453,2023-7-5-0-21-24-133,Normal
+random_forest,1,2023-7-5-0-22-16-540,2023-7-5-0-22-19-400,Normal
+random_forest,1,2023-7-5-0-22-46-759,2023-7-5-0-22-50-439,Normal
+random_forest,1,2023-7-5-0-23-18-200,2023-7-5-0-23-21-980,Abnormal resistance
+random_forest,2,2023-7-5-0-24-11-124,2023-7-5-0-24-13-944,Normal
+random_forest,2,2023-7-5-0-25-10-422,2023-7-5-0-25-13-282,Normal
+random_forest,2,2023-7-5-0-25-50-832,2023-7-5-0-25-53-652,Normal
+random_forest,2,2023-7-5-0-26-38-238,2023-7-5-0-26-41-998,Normal
+random_forest,2,2023-7-5-0-26-53-854,2023-7-5-0-26-56-654,Normal
+random_forest,2,2023-7-5-0-27-40-473,2023-7-5-0-27-43-333,Normal
+random_forest,2,2023-7-5-0-28-20-800,2023-7-5-0-28-23-620,Normal
+random_forest,2,2023-7-5-0-28-51-275,2023-7-5-0-28-55-35,Normal
+random_forest,2,2023-7-5-0-29-31-944,2023-7-5-0-29-34-724,Normal
+random_forest,2,2023-7-5-0-30-26-664,2023-7-5-0-30-30-364,Normal
+random_forest,2,2023-7-5-0-30-43-983,2023-7-5-0-30-46-803,Abnormal resistance
+random_forest,2,2023-7-5-0-31-3-745,2023-7-5-0-31-6-545,Normal
+random_forest,2,2023-7-5-0-31-59-892,2023-7-5-0-32-3-672,Normal
+random_forest,2,2023-7-5-0-32-43-694,2023-7-5-0-32-47-374,Normal
+random_forest,2,2023-7-5-0-33-29-832,2023-7-5-0-33-33-552,Abnormal resistance
+random_forest,2,2023-7-5-0-34-11-718,2023-7-5-0-34-15-418,Normal
+random_forest,2,2023-7-5-0-34-44-96,2023-7-5-0-34-47-796,Normal
+random_forest,3,2023-7-5-0-35-1-654,2023-7-5-0-35-4-394,Abnormal resistance
+random_forest,3,2023-7-5-0-35-40-152,2023-7-5-0-35-43-932,Normal
+random_forest,3,2023-7-5-0-36-41-950,2023-7-5-0-36-45-630,Normal
+random_forest,3,2023-7-5-0-37-13-423,2023-7-5-0-37-17-143,Abnormal resistance
+random_forest,3,2023-7-5-0-37-39-851,2023-7-5-0-37-43-551,Normal
+random_forest,3,2023-7-5-0-38-15-897,2023-7-5-0-38-19-597,Normal
+random_forest,3,2023-7-5-0-39-11-422,2023-7-5-0-39-15-122,Normal
+random_forest,3,2023-7-5-0-39-40-660,2023-7-5-0-39-44-400,Abnormal resistance
+random_forest,3,2023-7-5-0-40-22-964,2023-7-5-0-40-25-764,Abnormal resistance
+random_forest,3,2023-7-5-0-41-6-213,2023-7-5-0-41-8-993,Normal
+random_forest,3,2023-7-5-0-41-59-719,2023-7-5-0-42-2-539,Normal
+random_forest,3,2023-7-5-0-42-42-84,2023-7-5-0-42-44-964,Abnormal resistance
+random_forest,3,2023-7-5-0-43-27-797,2023-7-5-0-43-30-637,Normal
+random_forest,3,2023-7-5-0-44-14-353,2023-7-5-0-44-17-133,Normal
+random_forest,3,2023-7-5-0-45-5-208,2023-7-5-0-45-8-928,Abnormal resistance
+random_forest,3,2023-7-5-0-45-39-906,2023-7-5-0-45-42-726,Normal
+random_forest,3,2023-7-5-0-46-11-961,2023-7-5-0-46-15-661,Normal
+random_forest,4,2023-7-5-0-46-55-304,2023-7-5-0-46-58-64,Normal
+random_forest,4,2023-7-5-0-47-26-875,2023-7-5-0-47-29-695,Normal
+random_forest,4,2023-7-5-0-47-46-274,2023-7-5-0-47-49-974,Normal
+random_forest,4,2023-7-5-0-48-25-883,2023-7-5-0-48-29-583,Abnormal resistance
+random_forest,4,2023-7-5-0-49-0-735,2023-7-5-0-49-4-415,Normal
+random_forest,4,2023-7-5-0-49-41-413,2023-7-5-0-49-44-253,Normal
+random_forest,4,2023-7-5-0-50-34-415,2023-7-5-0-50-37-255,Abnormal resistance
+random_forest,4,2023-7-5-0-51-23-833,2023-7-5-0-51-26-653,Normal
+random_forest,4,2023-7-5-0-51-54-106,2023-7-5-0-51-57-786,Normal
+random_forest,4,2023-7-5-0-52-32-643,2023-7-5-0-52-35-423,Abnormal resistance
+random_forest,4,2023-7-5-0-53-1-0,2023-7-5-0-53-4-740,Abnormal resistance
+random_forest,4,2023-7-5-0-53-43-39,2023-7-5-0-53-46-799,Normal
+random_forest,4,2023-7-5-0-54-11-580,2023-7-5-0-54-15-280,Normal
+random_forest,4,2023-7-5-0-54-41-12,2023-7-5-0-54-44-712,Abnormal resistance
+random_forest,4,2023-7-5-0-55-30-889,2023-7-5-0-55-34-569,Normal
+random_forest,4,2023-7-5-0-55-57-621,2023-7-5-0-56-1-301,Normal
+random_forest,4,2023-7-5-0-56-13-678,2023-7-5-0-56-17-338,Normal
+extra_trees,1,2023-7-5-0-11-42-400,2023-7-5-0-11-45-220,Normal
+extra_trees,1,2023-7-5-0-12-17-355,2023-7-5-0-12-20-215,Normal
+extra_trees,1,2023-7-5-0-13-19-38,2023-7-5-0-13-22-718,Normal
+extra_trees,1,2023-7-5-0-13-40-783,2023-7-5-0-13-43-543,Normal
+extra_trees,1,2023-7-5-0-14-37-719,2023-7-5-0-14-40-539,Normal
+extra_trees,1,2023-7-5-0-15-37-485,2023-7-5-0-15-40-325,Normal
+extra_trees,1,2023-7-5-0-15-58-428,2023-7-5-0-16-1-288,Abnormal resistance
+extra_trees,1,2023-7-5-0-16-53-605,2023-7-5-0-16-56-385,Normal
+extra_trees,1,2023-7-5-0-17-6-600,2023-7-5-0-17-10-280,Normal
+extra_trees,1,2023-7-5-0-18-5-449,2023-7-5-0-18-9-169,Abnormal resistance
+extra_trees,1,2023-7-5-0-18-34-44,2023-7-5-0-18-37-724,Normal
+extra_trees,1,2023-7-5-0-19-30-17,2023-7-5-0-19-32-817,Normal
+extra_trees,1,2023-7-5-0-20-23-918,2023-7-5-0-20-26-758,Normal
+extra_trees,1,2023-7-5-0-21-20-453,2023-7-5-0-21-24-133,Normal
+extra_trees,1,2023-7-5-0-22-16-540,2023-7-5-0-22-19-400,Normal
+extra_trees,1,2023-7-5-0-22-46-759,2023-7-5-0-22-50-439,Normal
+extra_trees,1,2023-7-5-0-23-18-200,2023-7-5-0-23-21-980,Abnormal resistance
+extra_trees,2,2023-7-5-0-24-11-124,2023-7-5-0-24-13-944,Normal
+extra_trees,2,2023-7-5-0-25-10-422,2023-7-5-0-25-13-282,Normal
+extra_trees,2,2023-7-5-0-25-50-832,2023-7-5-0-25-53-652,Normal
+extra_trees,2,2023-7-5-0-26-38-238,2023-7-5-0-26-41-998,Normal
+extra_trees,2,2023-7-5-0-26-53-854,2023-7-5-0-26-56-654,Normal
+extra_trees,2,2023-7-5-0-27-40-473,2023-7-5-0-27-43-333,Normal
+extra_trees,2,2023-7-5-0-28-20-800,2023-7-5-0-28-23-620,Normal
+extra_trees,2,2023-7-5-0-28-51-275,2023-7-5-0-28-55-35,Normal
+extra_trees,2,2023-7-5-0-29-31-944,2023-7-5-0-29-34-724,Normal
+extra_trees,2,2023-7-5-0-30-26-664,2023-7-5-0-30-30-364,Normal
+extra_trees,2,2023-7-5-0-30-43-983,2023-7-5-0-30-46-803,Abnormal resistance
+extra_trees,2,2023-7-5-0-31-3-745,2023-7-5-0-31-6-545,Normal
+extra_trees,2,2023-7-5-0-31-59-892,2023-7-5-0-32-3-672,Normal
+extra_trees,2,2023-7-5-0-32-43-694,2023-7-5-0-32-47-374,Normal
+extra_trees,2,2023-7-5-0-33-29-832,2023-7-5-0-33-33-552,Abnormal resistance
+extra_trees,2,2023-7-5-0-34-11-718,2023-7-5-0-34-15-418,Normal
+extra_trees,2,2023-7-5-0-34-44-96,2023-7-5-0-34-47-796,Normal
+extra_trees,3,2023-7-5-0-35-1-654,2023-7-5-0-35-4-394,Abnormal resistance
+extra_trees,3,2023-7-5-0-35-40-152,2023-7-5-0-35-43-932,Normal
+extra_trees,3,2023-7-5-0-36-41-950,2023-7-5-0-36-45-630,Normal
+extra_trees,3,2023-7-5-0-37-13-423,2023-7-5-0-37-17-143,Abnormal resistance
+extra_trees,3,2023-7-5-0-37-39-851,2023-7-5-0-37-43-551,Normal
+extra_trees,3,2023-7-5-0-38-15-897,2023-7-5-0-38-19-597,Normal
+extra_trees,3,2023-7-5-0-39-11-422,2023-7-5-0-39-15-122,Normal
+extra_trees,3,2023-7-5-0-39-40-660,2023-7-5-0-39-44-400,Abnormal resistance
+extra_trees,3,2023-7-5-0-40-22-964,2023-7-5-0-40-25-764,Abnormal resistance
+extra_trees,3,2023-7-5-0-41-6-213,2023-7-5-0-41-8-993,Normal
+extra_trees,3,2023-7-5-0-41-59-719,2023-7-5-0-42-2-539,Normal
+extra_trees,3,2023-7-5-0-42-42-84,2023-7-5-0-42-44-964,Abnormal resistance
+extra_trees,3,2023-7-5-0-43-27-797,2023-7-5-0-43-30-637,Normal
+extra_trees,3,2023-7-5-0-44-14-353,2023-7-5-0-44-17-133,Normal
+extra_trees,3,2023-7-5-0-45-5-208,2023-7-5-0-45-8-928,Abnormal resistance
+extra_trees,3,2023-7-5-0-45-39-906,2023-7-5-0-45-42-726,Normal
+extra_trees,3,2023-7-5-0-46-11-961,2023-7-5-0-46-15-661,Normal
+extra_trees,4,2023-7-5-0-46-55-304,2023-7-5-0-46-58-64,Normal
+extra_trees,4,2023-7-5-0-47-26-875,2023-7-5-0-47-29-695,Normal
+extra_trees,4,2023-7-5-0-47-46-274,2023-7-5-0-47-49-974,Normal
+extra_trees,4,2023-7-5-0-48-25-883,2023-7-5-0-48-29-583,Abnormal resistance
+extra_trees,4,2023-7-5-0-49-0-735,2023-7-5-0-49-4-415,Normal
+extra_trees,4,2023-7-5-0-49-41-413,2023-7-5-0-49-44-253,Normal
+extra_trees,4,2023-7-5-0-50-34-415,2023-7-5-0-50-37-255,Abnormal resistance
+extra_trees,4,2023-7-5-0-51-23-833,2023-7-5-0-51-26-653,Normal
+extra_trees,4,2023-7-5-0-51-54-106,2023-7-5-0-51-57-786,Normal
+extra_trees,4,2023-7-5-0-52-32-643,2023-7-5-0-52-35-423,Abnormal resistance
+extra_trees,4,2023-7-5-0-53-1-0,2023-7-5-0-53-4-740,Abnormal resistance
+extra_trees,4,2023-7-5-0-53-43-39,2023-7-5-0-53-46-799,Normal
+extra_trees,4,2023-7-5-0-54-11-580,2023-7-5-0-54-15-280,Normal
+extra_trees,4,2023-7-5-0-54-41-12,2023-7-5-0-54-44-712,Abnormal resistance
+extra_trees,4,2023-7-5-0-55-30-889,2023-7-5-0-55-34-569,Normal
+extra_trees,4,2023-7-5-0-55-57-621,2023-7-5-0-56-1-301,Normal
+extra_trees,4,2023-7-5-0-56-13-678,2023-7-5-0-56-17-338,Normal
+gradient_boosting,1,2023-7-5-0-11-42-400,2023-7-5-0-11-45-220,Normal
+gradient_boosting,1,2023-7-5-0-12-17-355,2023-7-5-0-12-20-215,Normal
+gradient_boosting,1,2023-7-5-0-13-19-38,2023-7-5-0-13-22-718,Normal
+gradient_boosting,1,2023-7-5-0-13-40-783,2023-7-5-0-13-43-543,Normal
+gradient_boosting,1,2023-7-5-0-14-37-719,2023-7-5-0-14-40-539,Normal
+gradient_boosting,1,2023-7-5-0-15-37-485,2023-7-5-0-15-40-325,Normal
+gradient_boosting,1,2023-7-5-0-15-58-428,2023-7-5-0-16-1-288,Abnormal resistance
+gradient_boosting,1,2023-7-5-0-16-53-605,2023-7-5-0-16-56-385,Normal
+gradient_boosting,1,2023-7-5-0-17-6-600,2023-7-5-0-17-10-280,Normal
+gradient_boosting,1,2023-7-5-0-18-5-449,2023-7-5-0-18-9-169,Abnormal resistance
+gradient_boosting,1,2023-7-5-0-18-34-44,2023-7-5-0-18-37-724,Normal
+gradient_boosting,1,2023-7-5-0-19-30-17,2023-7-5-0-19-32-817,Normal
+gradient_boosting,1,2023-7-5-0-20-23-918,2023-7-5-0-20-26-758,Normal
+gradient_boosting,1,2023-7-5-0-21-20-453,2023-7-5-0-21-24-133,Normal
+gradient_boosting,1,2023-7-5-0-22-16-540,2023-7-5-0-22-19-400,Normal
+gradient_boosting,1,2023-7-5-0-22-46-759,2023-7-5-0-22-50-439,Normal
+gradient_boosting,1,2023-7-5-0-23-18-200,2023-7-5-0-23-21-980,Abnormal resistance
+gradient_boosting,2,2023-7-5-0-24-11-124,2023-7-5-0-24-13-944,Normal
+gradient_boosting,2,2023-7-5-0-25-10-422,2023-7-5-0-25-13-282,Normal
+gradient_boosting,2,2023-7-5-0-25-50-832,2023-7-5-0-25-53-652,Normal
+gradient_boosting,2,2023-7-5-0-26-38-238,2023-7-5-0-26-41-998,Normal
+gradient_boosting,2,2023-7-5-0-26-53-854,2023-7-5-0-26-56-654,Normal
+gradient_boosting,2,2023-7-5-0-27-40-473,2023-7-5-0-27-43-333,Normal
+gradient_boosting,2,2023-7-5-0-28-20-800,2023-7-5-0-28-23-620,Normal
+gradient_boosting,2,2023-7-5-0-28-51-275,2023-7-5-0-28-55-35,Normal
+gradient_boosting,2,2023-7-5-0-29-31-944,2023-7-5-0-29-34-724,Normal
+gradient_boosting,2,2023-7-5-0-30-26-664,2023-7-5-0-30-30-364,Normal
+gradient_boosting,2,2023-7-5-0-30-43-983,2023-7-5-0-30-46-803,Abnormal resistance
+gradient_boosting,2,2023-7-5-0-31-3-745,2023-7-5-0-31-6-545,Normal
+gradient_boosting,2,2023-7-5-0-31-59-892,2023-7-5-0-32-3-672,Normal
+gradient_boosting,2,2023-7-5-0-32-43-694,2023-7-5-0-32-47-374,Normal
+gradient_boosting,2,2023-7-5-0-33-29-832,2023-7-5-0-33-33-552,Abnormal resistance
+gradient_boosting,2,2023-7-5-0-34-11-718,2023-7-5-0-34-15-418,Normal
+gradient_boosting,2,2023-7-5-0-34-44-96,2023-7-5-0-34-47-796,Normal
+gradient_boosting,3,2023-7-5-0-35-1-654,2023-7-5-0-35-4-394,Abnormal resistance
+gradient_boosting,3,2023-7-5-0-35-40-152,2023-7-5-0-35-43-932,Normal
+gradient_boosting,3,2023-7-5-0-36-41-950,2023-7-5-0-36-45-630,Normal
+gradient_boosting,3,2023-7-5-0-37-13-423,2023-7-5-0-37-17-143,Abnormal resistance
+gradient_boosting,3,2023-7-5-0-37-39-851,2023-7-5-0-37-43-551,Normal
+gradient_boosting,3,2023-7-5-0-38-15-897,2023-7-5-0-38-19-597,Normal
+gradient_boosting,3,2023-7-5-0-39-11-422,2023-7-5-0-39-15-122,Normal
+gradient_boosting,3,2023-7-5-0-39-40-660,2023-7-5-0-39-44-400,Abnormal resistance
+gradient_boosting,3,2023-7-5-0-40-22-964,2023-7-5-0-40-25-764,Abnormal resistance
+gradient_boosting,3,2023-7-5-0-41-6-213,2023-7-5-0-41-8-993,Normal
+gradient_boosting,3,2023-7-5-0-41-59-719,2023-7-5-0-42-2-539,Normal
+gradient_boosting,3,2023-7-5-0-42-42-84,2023-7-5-0-42-44-964,Abnormal resistance
+gradient_boosting,3,2023-7-5-0-43-27-797,2023-7-5-0-43-30-637,Normal
+gradient_boosting,3,2023-7-5-0-44-14-353,2023-7-5-0-44-17-133,Normal
+gradient_boosting,3,2023-7-5-0-45-5-208,2023-7-5-0-45-8-928,Abnormal resistance
+gradient_boosting,3,2023-7-5-0-45-39-906,2023-7-5-0-45-42-726,Normal
+gradient_boosting,3,2023-7-5-0-46-11-961,2023-7-5-0-46-15-661,Normal
+gradient_boosting,4,2023-7-5-0-46-55-304,2023-7-5-0-46-58-64,Normal
+gradient_boosting,4,2023-7-5-0-47-26-875,2023-7-5-0-47-29-695,Normal
+gradient_boosting,4,2023-7-5-0-47-46-274,2023-7-5-0-47-49-974,Normal
+gradient_boosting,4,2023-7-5-0-48-25-883,2023-7-5-0-48-29-583,Abnormal resistance
+gradient_boosting,4,2023-7-5-0-49-0-735,2023-7-5-0-49-4-415,Normal
+gradient_boosting,4,2023-7-5-0-49-41-413,2023-7-5-0-49-44-253,Normal
+gradient_boosting,4,2023-7-5-0-50-34-415,2023-7-5-0-50-37-255,Abnormal resistance
+gradient_boosting,4,2023-7-5-0-51-23-833,2023-7-5-0-51-26-653,Normal
+gradient_boosting,4,2023-7-5-0-51-54-106,2023-7-5-0-51-57-786,Normal
+gradient_boosting,4,2023-7-5-0-52-32-643,2023-7-5-0-52-35-423,Normal
+gradient_boosting,4,2023-7-5-0-53-1-0,2023-7-5-0-53-4-740,Abnormal resistance
+gradient_boosting,4,2023-7-5-0-53-43-39,2023-7-5-0-53-46-799,Normal
+gradient_boosting,4,2023-7-5-0-54-11-580,2023-7-5-0-54-15-280,Normal
+gradient_boosting,4,2023-7-5-0-54-41-12,2023-7-5-0-54-44-712,Abnormal resistance
+gradient_boosting,4,2023-7-5-0-55-30-889,2023-7-5-0-55-34-569,Normal
+gradient_boosting,4,2023-7-5-0-55-57-621,2023-7-5-0-56-1-301,Normal
+gradient_boosting,4,2023-7-5-0-56-13-678,2023-7-5-0-56-17-338,Normal

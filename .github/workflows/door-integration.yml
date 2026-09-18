@@ -1,0 +1,46 @@
+name: Door integration checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [integration/frozen-door-model]
+    paths: [.github/workflows/door-integration.yml]
+permissions:
+  contents: read
+concurrency:
+  group: door-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive tracked source for integration review
+        run: git archive --format=tar HEAD -o /tmp/railwitness-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot
+          path: /tmp/railwitness-source.tar
+          retention-days: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/setup-python@v5
+        if: ${{ hashFiles('backend/door/requirements.txt') != '' }}
+        with:
+          python-version: '3.13'
+      - name: Check frozen Door service
+        if: ${{ hashFiles('backend/door/requirements.txt') != '' }}
+        run: |
+          python -m pip install -r backend/door/requirements.txt httpx pytest
+          python backend/door/restore_model.py
+          cd backend/door
+          python -m pytest -q
