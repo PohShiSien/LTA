@@ -1,0 +1,25 @@
+{
+  "performed_at_utc": "2026-09-18T06:58:52.840629+00:00",
+  "method": "HTTP multipart POST to the included running FastAPI app, followed by its CSV and ZIP download endpoints.",
+  "endpoint": "POST /api/door/predict",
+  "source_file": "Test(1).csv",
+  "source_sha256": "8cbea142cf46eac40455ddcac17e334c1842a6f7632f006e48c7d0d41582bfe3",
+  "model_sha256": "077e4a21838857e4b6bb2e5d2c9b9e1c7741a84d00c52a2d41ecb2489750ea7c",
+  "predictions_sha256": "2f94f8f5e2ccd6bce223a7c2f9fd2c7b974aa17cbce3d7bc3521dd100d7a079b",
+  "zip_members": [
+    "door_predictions.csv"
+  ],
+  "model_selected_before_test_inference": true,
+  "test_reference_labels_available": false,
+  "test_score": null,
+  "result_summary": {
+    "rows": 6253,
+    "cycles": 38,
+    "normal": 30,
+    "abnormal_resistance": 8,
+    "source_start": "2023-7-5-0-0-0-0",
+    "source_end": "2023-7-5-0-23-49-544",
+    "inference_seconds": 0.0997
+  },
+  "job_id": "a4a6828a9ad24fec890ab06f769925be"
+}

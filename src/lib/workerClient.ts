@@ -7,6 +7,7 @@ export type WorkerRequest =
   | { type: 'demo'; subsystem: Subsystem }
   | { type: 'analyse'; key: string }
   | { type: 'inspect'; key: string; cursor: number; fields: string[] }
+  | { type: 'visualEvidence'; key: string }
   | { type: 'remove'; key: string };
 export const sourceKey = (recording: Pick<RecordingSummary, 'source'> | AnalysisResult) => {
   const source = recording.source;
@@ -39,6 +40,7 @@ export function workerRequest<T>(request: WorkerRequest): Promise<T> {
 export function initialSelection(subsystem: Subsystem, recording?: RecordingSummary): ComponentSelection {
   if (!recording) return { kind: 'recording' };
   if (subsystem === 'rail') return { kind: 'axleBox', carOrdinal: 1, position: 1 };
-  if (subsystem === 'acv') return { kind: 'car', carId: recording?.carIds[0] ?? '01', ordinal: 1 };
+  // Start case-level ranking at the whole train; a user car selection opts into camera focus.
+  if (subsystem === 'acv') return { kind: 'recording' };
   return { kind: 'recording' };
 }

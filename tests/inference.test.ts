@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import featureParity from './fixtures/feature-parity.json';
 import modelParity from './fixtures/model-parity.json';
-import { acvFeatures, analyseRecording, doorFeatures, evaluatePortableModel, getTrainedModel, railFeatures, shmFeatures } from '../src/lib/inference';
+import { acvFeatures, analyseRecording, evaluatePortableModel, getTrainedModel, railFeatures, shmFeatures } from '../src/lib/inference';
 import type { CellValue, Recording, Subsystem } from '../src/types/multisystem';
 
 function recording(subsystem: Subsystem, rows: CellValue[][], headers: string[], fileName = 'uploaded.csv'): Recording {
@@ -24,10 +24,6 @@ describe('Python training / browser feature parity', () => {
     expectFeatures(shmFeatures(recording('shm', fixture.rows, ['stress'])), fixture.features);
   });
 
-  it('matches actual labelled Door cycle feature extraction', () => {
-    expectFeatures(doorFeatures(modelParity.door.rows), modelParity.door.features);
-  });
-
   it('matches ACV temperatures, validity filtering and relative case features', () => {
     const fixture = featureParity.acv;
     const extracted = acvFeatures(recording('acv', fixture.rows, fixture.headers));
@@ -37,7 +33,7 @@ describe('Python training / browser feature parity', () => {
 });
 
 describe('portable fitted artifacts', () => {
-  for (const subsystem of ['door', 'rail'] as const) {
+  for (const subsystem of ['rail'] as const) {
     it(`reproduces Python's fitted ${subsystem} prediction`, () => {
       const model = getTrainedModel(subsystem);
       const fixture = modelParity[subsystem];
@@ -63,15 +59,10 @@ describe('portable fitted artifacts', () => {
 });
 
 describe('real-recording inference contract', () => {
-  it('returns exact Door timestamps and classified segments without waiting for future evidence', async () => {
+  it('requires the frozen Python backend for uploaded Door prediction and cannot use the old browser artifact', async () => {
     const fixture = modelParity.door;
-    const source = recording('door', fixture.rows, fixture.headers);
-    const result = await analyseRecording(source);
-    expect(result.subsystem).toBe('door');
-    if (result.subsystem !== 'door') return;
-    expect(result.segments).toEqual([{ start_time: fixture.rows[0][0], end_time: fixture.rows[fixture.rows.length - 1][0], prediction: fixture.prediction, startIndex: 0, endIndex: fixture.rows.length - 1 }]);
-    expect(result.source).toEqual(source.source);
-    expect(result.model.training).toContain('110');
+    await expect(analyseRecording(recording('door', fixture.rows, fixture.headers))).rejects.toThrow('frozen Python backend');
+    expect(() => getTrainedModel('door')).toThrow('frozen Python backend');
   });
 
   it('preserves all eight exact car IDs in one case-level ranking with no probability field', async () => {
@@ -80,7 +71,13 @@ describe('real-recording inference contract', () => {
     if (result.subsystem !== 'acv') throw new Error('wrong subsystem');
     expect([...result.rankedCars].sort()).toEqual(fixture.cars);
     expect(result.scope).toBe('car-case');
-    expect(result.scores).toBeUndefined();
+    expect(Object.keys(result.scores ?? {}).sort()).toEqual(fixture.cars);
+    const features = acvFeatures(recording('acv', fixture.rows, fixture.headers));
+    const model = getTrainedModel('acv');
+    const classIndex = model.classes!.indexOf('1');
+    features.cars.forEach((car, index) => {
+      expect(result.scores?.[car]).toEqual(evaluatePortableModel(model, features.features[index])[classIndex]);
+    });
   });
 
   it('cannot use randomly numbered SHM filenames as predictive features or spatial mapping', async () => {

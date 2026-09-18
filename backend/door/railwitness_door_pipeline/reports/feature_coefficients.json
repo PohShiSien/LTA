@@ -1,0 +1,386 @@
+[
+  {
+    "feature": "moving_current_q90",
+    "standardised_coefficient": 0.23312408378217672
+  },
+  {
+    "feature": "current_q10",
+    "standardised_coefficient": 0.2201314227123022
+  },
+  {
+    "feature": "moving_current_rms",
+    "standardised_coefficient": 0.21338424974058198
+  },
+  {
+    "feature": "moving_current_mean",
+    "standardised_coefficient": 0.20525264823489933
+  },
+  {
+    "feature": "moving_current_std",
+    "standardised_coefficient": 0.2001511651616414
+  },
+  {
+    "feature": "moving_current_q10",
+    "standardised_coefficient": 0.19799936005597307
+  },
+  {
+    "feature": "charge_per_travel",
+    "standardised_coefficient": 0.19466724215650574
+  },
+  {
+    "feature": "charge_abs_As",
+    "standardised_coefficient": 0.1944032306591444
+  },
+  {
+    "feature": "phase2_current_mean",
+    "standardised_coefficient": 0.18582895329504923
+  },
+  {
+    "feature": "phase2_current_q90",
+    "standardised_coefficient": 0.18547394550631507
+  },
+  {
+    "feature": "moving_current_max",
+    "standardised_coefficient": 0.17716703803679829
+  },
+  {
+    "feature": "phase3_current_q90",
+    "standardised_coefficient": 0.1743956117107427
+  },
+  {
+    "feature": "moving_bemf_std",
+    "standardised_coefficient": -0.1729434964022719
+  },
+  {
+    "feature": "moving_current_median",
+    "standardised_coefficient": 0.16709504832675648
+  },
+  {
+    "feature": "energy_per_travel",
+    "standardised_coefficient": 0.1666399614500036
+  },
+  {
+    "feature": "electrical_energy_abs_J",
+    "standardised_coefficient": 0.16644581244547543
+  },
+  {
+    "feature": "current_median",
+    "standardised_coefficient": 0.16456715815422931
+  },
+  {
+    "feature": "phase1_current_q90",
+    "standardised_coefficient": 0.1595306195405678
+  },
+  {
+    "feature": "phase0_bemf_mean",
+    "standardised_coefficient": -0.15867150600428911
+  },
+  {
+    "feature": "voltage_median",
+    "standardised_coefficient": 0.15203147967815012
+  },
+  {
+    "feature": "phase1_current_mean",
+    "standardised_coefficient": 0.1505540491855604
+  },
+  {
+    "feature": "phase3_current_mean",
+    "standardised_coefficient": 0.14107922435012468
+  },
+  {
+    "feature": "phase0_current_q90",
+    "standardised_coefficient": 0.13482542262132985
+  },
+  {
+    "feature": "phase4_voltage_mean",
+    "standardised_coefficient": 0.13387703533725667
+  },
+  {
+    "feature": "phase0_speed_mean",
+    "standardised_coefficient": -0.12349674684183401
+  },
+  {
+    "feature": "current_mean",
+    "standardised_coefficient": 0.12172199176927957
+  },
+  {
+    "feature": "phase0_current_mean",
+    "standardised_coefficient": 0.11603967160374941
+  },
+  {
+    "feature": "voltage_q10",
+    "standardised_coefficient": 0.09186743024025705
+  },
+  {
+    "feature": "moving_abs_speed_std",
+    "standardised_coefficient": -0.09142060177958278
+  },
+  {
+    "feature": "phase4_time_fraction",
+    "standardised_coefficient": -0.0906186031465474
+  },
+  {
+    "feature": "current_diff_rms",
+    "standardised_coefficient": -0.08854758836147608
+  },
+  {
+    "feature": "current_max",
+    "standardised_coefficient": -0.08107604168819214
+  },
+  {
+    "feature": "phase3_time_fraction",
+    "standardised_coefficient": 0.07165009243537976
+  },
+  {
+    "feature": "moving_voltage_max",
+    "standardised_coefficient": 0.06074557660001204
+  },
+  {
+    "feature": "phase0_voltage_mean",
+    "standardised_coefficient": 0.05914600156629932
+  },
+  {
+    "feature": "voltage_max",
+    "standardised_coefficient": 0.0589693662823318
+  },
+  {
+    "feature": "phase4_bemf_mean",
+    "standardised_coefficient": 0.05800498704870729
+  },
+  {
+    "feature": "phase4_speed_mean",
+    "standardised_coefficient": 0.05412622710426379
+  },
+  {
+    "feature": "current_rms",
+    "standardised_coefficient": 0.05183773366134117
+  },
+  {
+    "feature": "phase3_bemf_mean",
+    "standardised_coefficient": -0.04677208016675431
+  },
+  {
+    "feature": "bemf_mean",
+    "standardised_coefficient": -0.04516455285186433
+  },
+  {
+    "feature": "phase2_bemf_mean",
+    "standardised_coefficient": -0.04450563242226785
+  },
+  {
+    "feature": "bemf_rms",
+    "standardised_coefficient": -0.043326132350829105
+  },
+  {
+    "feature": "moving_voltage_q90",
+    "standardised_coefficient": 0.04243443986487978
+  },
+  {
+    "feature": "bemf_std",
+    "standardised_coefficient": -0.042002151119754985
+  },
+  {
+    "feature": "bemf_q90",
+    "standardised_coefficient": -0.041499468966281094
+  },
+  {
+    "feature": "moving_bemf_q90",
+    "standardised_coefficient": -0.04009788420906042
+  },
+  {
+    "feature": "phase3_speed_mean",
+    "standardised_coefficient": -0.039963016975395484
+  },
+  {
+    "feature": "moving_bemf_median",
+    "standardised_coefficient": -0.03979213319331951
+  },
+  {
+    "feature": "voltage_mean",
+    "standardised_coefficient": 0.03867139247357424
+  },
+  {
+    "feature": "moving_bemf_max",
+    "standardised_coefficient": -0.037947093724047955
+  },
+  {
+    "feature": "bemf_max",
+    "standardised_coefficient": -0.03778460964490923
+  },
+  {
+    "feature": "moving_bemf_rms",
+    "standardised_coefficient": -0.037673776583204026
+  },
+  {
+    "feature": "phase1_bemf_mean",
+    "standardised_coefficient": -0.03698761778151364
+  },
+  {
+    "feature": "phase2_speed_mean",
+    "standardised_coefficient": -0.0368034400659978
+  },
+  {
+    "feature": "phase0_time_fraction",
+    "standardised_coefficient": 0.036363222746196446
+  },
+  {
+    "feature": "abs_speed_std",
+    "standardised_coefficient": -0.035607455223137206
+  },
+  {
+    "feature": "moving_bemf_mean",
+    "standardised_coefficient": -0.035597051247752254
+  },
+  {
+    "feature": "moving_abs_speed_max",
+    "standardised_coefficient": -0.035047323417222845
+  },
+  {
+    "feature": "abs_speed_max",
+    "standardised_coefficient": -0.03353960333909411
+  },
+  {
+    "feature": "abs_speed_rms",
+    "standardised_coefficient": -0.03208517728470278
+  },
+  {
+    "feature": "current_std",
+    "standardised_coefficient": -0.03149996194687394
+  },
+  {
+    "feature": "phase2_time_fraction",
+    "standardised_coefficient": 0.03117754453944976
+  },
+  {
+    "feature": "moving_abs_speed_median",
+    "standardised_coefficient": -0.03051780594346889
+  },
+  {
+    "feature": "moving_abs_speed_rms",
+    "standardised_coefficient": -0.030483730502602467
+  },
+  {
+    "feature": "duration_s",
+    "standardised_coefficient": 0.029529096598491116
+  },
+  {
+    "feature": "abs_speed_mean",
+    "standardised_coefficient": -0.029231676962956338
+  },
+  {
+    "feature": "moving_abs_speed_mean",
+    "standardised_coefficient": -0.02889909888302498
+  },
+  {
+    "feature": "phase4_current_q90",
+    "standardised_coefficient": -0.028880338609273883
+  },
+  {
+    "feature": "voltage_q90",
+    "standardised_coefficient": 0.028685364534760654
+  },
+  {
+    "feature": "phase1_speed_mean",
+    "standardised_coefficient": -0.02726953196324847
+  },
+  {
+    "feature": "moving_abs_speed_q90",
+    "standardised_coefficient": -0.02687461713570658
+  },
+  {
+    "feature": "moving_voltage_q10",
+    "standardised_coefficient": 0.02656599516246569
+  },
+  {
+    "feature": "abs_speed_q90",
+    "standardised_coefficient": -0.024977880961433933
+  },
+  {
+    "feature": "voltage_rms",
+    "standardised_coefficient": 0.02284478680437619
+  },
+  {
+    "feature": "is_open",
+    "standardised_coefficient": -0.02270846336244905
+  },
+  {
+    "feature": "position_net_change",
+    "standardised_coefficient": -0.022567560159418226
+  },
+  {
+    "feature": "bemf_median",
+    "standardised_coefficient": -0.022184752893113266
+  },
+  {
+    "feature": "travel_raw_units",
+    "standardised_coefficient": -0.020575725306662896
+  },
+  {
+    "feature": "position_total_variation",
+    "standardised_coefficient": -0.020575725306662896
+  },
+  {
+    "feature": "phase1_time_fraction",
+    "standardised_coefficient": 0.019719244856922776
+  },
+  {
+    "feature": "phase4_current_mean",
+    "standardised_coefficient": 0.019192016242243315
+  },
+  {
+    "feature": "moving_voltage_std",
+    "standardised_coefficient": -0.016481716757484062
+  },
+  {
+    "feature": "phase3_voltage_mean",
+    "standardised_coefficient": -0.015544609659832212
+  },
+  {
+    "feature": "moving_bemf_q10",
+    "standardised_coefficient": -0.011857886630893478
+  },
+  {
+    "feature": "abs_speed_median",
+    "standardised_coefficient": 0.011508017509124393
+  },
+  {
+    "feature": "moving_abs_speed_q10",
+    "standardised_coefficient": -0.010884105591100908
+  },
+  {
+    "feature": "bemf_q10",
+    "standardised_coefficient": 0.009841250934181004
+  },
+  {
+    "feature": "moving_voltage_median",
+    "standardised_coefficient": -0.009596892648683995
+  },
+  {
+    "feature": "voltage_std",
+    "standardised_coefficient": -0.008926284607100501
+  },
+  {
+    "feature": "abs_speed_q10",
+    "standardised_coefficient": 0.007576911621676279
+  },
+  {
+    "feature": "moving_voltage_mean",
+    "standardised_coefficient": 0.003908833018676019
+  },
+  {
+    "feature": "moving_voltage_rms",
+    "standardised_coefficient": 0.0028176264020377834
+  },
+  {
+    "feature": "current_q90",
+    "standardised_coefficient": -0.002817037497017904
+  },
+  {
+    "feature": "phase2_voltage_mean",
+    "standardised_coefficient": -0.0010106414331668037
+  },
+  {
+    "feature": "phase1_voltage_mean",
+    "standardised_coefficient": -3.0062746954299602e-05
+  }
+]

@@ -38,6 +38,6 @@ export function demoAnalysis(recording: Recording): AnalysisResult {
     case 'rail': return { ...common, subsystem: 'rail', scope: 'recording', prediction: 'Side I' };
     case 'shm': return { ...common, subsystem: 'shm', scope: 'recording', predictedDamage: 2.61e-6, mapping: recording.mapping };
     case 'acv': return { ...common, subsystem: 'acv', scope: 'car-case', rankedCars: ['03', ...recording.carIds.filter(id => id !== '03')] };
-    case 'door': return { ...common, subsystem: 'door', scope: 'cycle', segments: [20, 220, 420].map((start, i) => ({ start_time: String(recording.rows[start][0]), end_time: String(recording.rows[start + 80][0]), prediction: i === 2 ? 'Abnormal resistance' : 'Normal', startIndex: start, endIndex: start + 80 })) };
+    case 'door': return { ...common, subsystem: 'door', scope: 'cycle', segments: [20, 220, 420].map((start, i) => ({ start_time: String(recording.rows[start][0]), end_time: String(recording.rows[start + 80][0]), prediction: i === 2 ? 'Abnormal resistance' : 'Normal', startIndex: start, endIndex: start + 80, operation: Number(recording.rows[start][recording.headers.indexOf('Door is opening')]) === 1 ? 'Open' : 'Close' })) };
   }
 }

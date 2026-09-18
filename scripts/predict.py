@@ -19,10 +19,6 @@ spec = importlib.util.spec_from_file_location('railwitness_features', ROOT/'scri
 features = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(features)
 
-DOOR_HEADERS = ['Datetime', 'Motor current(mA)', 'Motor Voltage(10mV)', 'Motor electrodynamic force',
-                'Door opening time(.1s)', 'Door closing time(.1s)', 'Close command', 'Open command',
-                'DCSR', 'DCSL', 'DLSR', 'DLSL', 'Door Opened', 'Door Locked', 'Door is opening', 'Door is closing', 'Door leaf position']
-
 
 def evaluate(model, vector):
     if len(vector) != model['featureCount'] or not np.isfinite(vector).all():
@@ -44,22 +40,7 @@ def evaluate(model, vector):
 
 def predict_file(path, subsystem, model):
     if subsystem == 'door':
-        table = pd.read_csv(path)
-        missing = [name for name in DOOR_HEADERS if name not in table.columns]
-        if missing:
-            raise ValueError('Missing required Door fields: '+', '.join(missing))
-        rows = table[DOOR_HEADERS].to_numpy().tolist()
-        if not rows:
-            raise ValueError('Empty Door recording')
-        times = [features.timestamp(row[0]) for row in rows]
-        if any(times[i] <= times[i-1] for i in range(1,len(times))):
-            raise ValueError('Door timestamps must be strictly chronological')
-        results = []; vectors = []
-        for start,end in features.door_segments(rows, model['gapSeconds']):
-            vector = features.door_features(rows[start:end+1]); scores = evaluate(model, vector)
-            results.append({'start_time': rows[start][0], 'end_time': rows[end][0], 'prediction': model['classes'][int(np.argmax(scores))]})
-            vectors.append(vector.tolist())
-        return results, {'features': vectors, 'predictions': results}
+        raise ValueError('Door uses the frozen backend. Run backend/door/predict.py with its own Python environment.')
     if subsystem == 'rail':
         table = pd.read_csv(path)
         expected = ['Rotating speed'] + [f'{kind} of bearing in position {position} of car {car}' for car in range(1,9) for position in range(1,9) for kind in ['Vibration','Shock']]
@@ -99,6 +80,8 @@ def main():
     parser.add_argument('--output', required=True, type=Path, help='Directory receiving the required prediction CSV')
     parser.add_argument('--diagnostics', type=Path, help='Optional feature/output JSON used for cross-runtime parity checking')
     args = parser.parse_args()
+    if args.subsystem == 'door':
+        parser.error('Door now uses backend/door/predict.py and backend/door/models/door_model.joblib; activate backend/door/.venv first.')
     models = json.loads((ROOT/'src/data/modelArtifacts.json').read_text()); model = models[args.subsystem]
     extensions = ['.xlsx', '.csv'] if args.subsystem == 'acv' else ['.csv']
     paths = [args.input] if args.input.is_file() else sorted(p for p in args.input.iterdir() if p.is_file() and p.suffix.lower() in extensions and not any(word in p.stem.lower() for word in ['label', 'answer']))

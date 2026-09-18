@@ -8,3 +8,27 @@ playwright-report/
 .env
 .env.*
 !.env.example
+
+# Local configuration and Python runtimes
+.env.local
+!.env.local.example
+backend/door/.venv/
+**/__pycache__/
+**/.pytest_cache/
+*.py[cod]
+
+# Raw organiser datasets belong outside the application repository.
+/data/
+/datasets/
+/raw_datasets/
+**/02_Datasets/
+backend/door/data/
+**/Train.csv
+**/Train(*).csv
+**/Test.csv
+**/Test(*).csv
+**/Train_Segments_Answer*.csv
+**/test[0-9]*.csv
+**/Test[0-9]*.csv
+**/acv_case_*.xlsx
+**/acv_test_case.xlsx

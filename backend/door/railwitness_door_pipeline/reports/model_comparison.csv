@@ -1,0 +1,8 @@
+model,pooled_development_iou_f1,mean_fold_iou_f1,std_fold_iou_f1
+majority_baseline,0.7647058823529411,0.7647058823529412,0.09300816647554054
+decision_stump,0.9852941176470589,0.9852941176470589,0.02547133540542467
+logistic_regression,1.0,1.0,0.0
+rbf_svm,1.0,1.0,0.0
+random_forest,1.0,1.0,0.0
+extra_trees,1.0,1.0,0.0
+gradient_boosting,0.9852941176470589,0.9852941176470589,0.02547133540542467

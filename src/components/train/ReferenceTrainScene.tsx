@@ -1,10 +1,12 @@
-import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Component, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { ContactShadows, Environment, Html, Lightformer, Line, OrbitControls, useGLTF } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import type { AnalysisResult, ComponentSelection, Mapping, SourceRef, Subsystem } from '../../types/multisystem';
+import type { SubsystemVisualState } from '../../types/visualization';
 import { CAR_COUNT, CAR_LENGTH, RAIL_AXLE_BOXES, RAIL_SIDES, TRAIN_LENGTH, carCenterX, referenceCarIds, selectedCarOrdinal, type AxleBoxAnchor, type RailSide } from '../../lib/topology';
+import { REPRESENTATIVE_DOOR, completedDoorAbnormal, doorOpeningFraction, rankEmphasis, scanCarOrdinal, unitProgress } from './subsystemVisuals';
 import './ReferenceTrainScene.css';
 
 export interface ReferenceTrainSceneProps {
@@ -20,6 +22,7 @@ export interface ReferenceTrainSceneProps {
   source?: SourceRef | null;
   cursorLabel?: string;
   sensorReadout?: { vibration: number | null; shock: number | null };
+  visualization?: SubsystemVisualState;
 }
 
 const CYAN = '#67cbbf';
@@ -91,7 +94,7 @@ function RailCallout({ anchor, source, result, cursorLabel, sensorReadout }: {
   </div>;
 }
 
-function AxleBoxLayer({ selectedOrdinal, selection, onSelect, result, source, cursorLabel, sensorReadout, xray }: {
+function AxleBoxLayer({ selectedOrdinal, selection, onSelect, result, source, cursorLabel, sensorReadout, xray, visualization, reducedMotion }: {
   selectedOrdinal: number | null;
   xray: boolean;
   selection: ComponentSelection;
@@ -100,35 +103,49 @@ function AxleBoxLayer({ selectedOrdinal, selection, onSelect, result, source, cu
   source?: SourceRef | null;
   cursorLabel?: string;
   sensorReadout?: ReferenceTrainSceneProps['sensorReadout'];
+  visualization?: SubsystemVisualState;
+  reducedMotion: boolean;
 }) {
+  const group = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!group.current) return;
+    const scanning = visualization?.analysisPhase === 'scanning' && !reducedMotion;
+    const sweep = -TRAIN_LENGTH / 2 + unitProgress(visualization?.scanProgress ?? 0) * TRAIN_LENGTH;
+    for (const node of group.current.children) {
+      const active = scanning && Math.abs(node.position.x - sweep) < 8;
+      const sphere = node.children[0] as THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+      sphere.scale.setScalar(active ? 1.15 + .3 * Math.sin(clock.elapsedTime * 8) : 1);
+      sphere.material.opacity = active || node.userData.carOrdinal === selectedOrdinal ? 1 : .53;
+    }
+  });
   const railClass = result?.subsystem === 'rail' ? result.prediction : null;
-  return <group name="RailAxleBoxRegistry" userData={{ anchorCount: 64, channelCount: 128, rotationalSpeedColumn: 0 }}>
+  return <group ref={group} name="RailAxleBoxRegistry" userData={{ anchorCount: 64, channelCount: 128, rotationalSpeedColumn: 0 }}>
     {RAIL_AXLE_BOXES.map(anchor => {
       const visible = selectedOrdinal === anchor.carOrdinal;
       const selected = selection.kind === 'axleBox' && selection.carOrdinal === anchor.carOrdinal && selection.position === anchor.position;
       const member = railClass === anchor.side;
-      return <group key={anchor.id} name={`AxleBox_C${anchor.carOrdinal}_P${anchor.position}`} position={[...anchor.worldPosition]} visible={visible}
+      return <group key={anchor.id} name={`AxleBox_C${anchor.carOrdinal}_P${anchor.position}`} position={[...anchor.worldPosition]}
         userData={{ carOrdinal: anchor.carOrdinal, position: anchor.position, side: anchor.side, vibrationIndex: anchor.vibrationIndex, shockIndex: anchor.shockIndex }}>
-        {visible && <>
+        <>
           <mesh renderOrder={xray ? 10 : 0} onClick={(event: ThreeEvent<MouseEvent>) => { event.stopPropagation(); onSelect({ kind: 'axleBox', carOrdinal: anchor.carOrdinal, position: anchor.position }); }}
             onPointerOver={(event: ThreeEvent<PointerEvent>) => { event.stopPropagation(); document.body.style.cursor = 'pointer'; }} onPointerOut={() => { document.body.style.cursor = ''; }}>
-            <sphereGeometry args={[selected ? .18 : .125, 12, 8]} />
-            <meshBasicMaterial color={source ? CYAN : MUTED} toneMapped={false} transparent opacity={1} depthTest={!xray} depthWrite={false} />
+            <sphereGeometry args={[selected ? .18 : visible ? .125 : .095, 12, 8]} />
+            <meshBasicMaterial color={source ? CYAN : MUTED} toneMapped={false} transparent opacity={visible ? 1 : .53} depthTest={!xray} depthWrite={false} />
           </mesh>
           {(selected || member) && <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NO_RAYCAST}>
             <torusGeometry args={[selected ? .25 : .205, .022, 6, 20]} />
             <meshBasicMaterial color={member ? AMBER : CYAN} transparent opacity={.85} toneMapped={false} />
           </mesh>}
-          <Html center position={[0, -.39, anchor.side === 'Side I' ? -.22 : .22]} zIndexRange={[20, 0]}>
+          {visible && <Html center position={[0, -.39, anchor.side === 'Side I' ? -.22 : .22]} zIndexRange={[20, 0]}>
             <button className={`reference-sensor-label${selected ? ' is-selected' : ''}${member ? ' is-side-member' : ''}`}
               aria-label={`Select car ${anchor.carOrdinal} axle box ${anchor.position}, ${anchor.side}`} aria-pressed={selected}
               title={`Car ${anchor.carOrdinal} / Position ${anchor.position} / ${anchor.side}${member ? ' · Member of predicted rail side; not an axle diagnosis' : ''}`}
               onClick={() => onSelect({ kind: 'axleBox', carOrdinal: anchor.carOrdinal, position: anchor.position })}>P{anchor.position}</button>
-          </Html>
+          </Html>}
           {selected && <Html center position={[0, 1.8, anchor.side === 'Side I' ? -1.25 : 1.25]} zIndexRange={[25, 0]} style={{ pointerEvents: 'none' }}>
             <RailCallout anchor={anchor} source={source} result={result} cursorLabel={cursorLabel} sensorReadout={sensorReadout} />
           </Html>}
-        </>}
+        </>
       </group>;
     })}
   </group>;
@@ -158,6 +175,47 @@ function MappedDoor({ mapping, ids, onSelect }: { mapping: Mapping; ids: string[
   </group>;
 }
 
+function IllustrativeDoor({ visualization, reducedMotion }: Pick<ReferenceTrainSceneProps, 'visualization' | 'reducedMotion'>) {
+  const left = useRef<THREE.Group>(null);
+  const right = useRef<THREE.Group>(null);
+  const outline = useRef<THREE.MeshBasicMaterial>(null);
+  const door = visualization?.door;
+  const abnormal = completedDoorAbnormal(door);
+  useFrame(({ clock }) => {
+    const opening = doorOpeningFraction(door, reducedMotion) * .47;
+    if (left.current) left.current.position.x = -.258 - opening;
+    if (right.current) right.current.position.x = .258 + opening;
+    if (outline.current) outline.current.opacity = abnormal && !reducedMotion ? .65 + .2 * Math.sin(clock.elapsedTime * 4) : .78;
+  });
+  return <group name="IllustrativeDoorMotion" position={[carCenterX(REPRESENTATIVE_DOOR.carOrdinal) + REPRESENTATIVE_DOOR.localX, REPRESENTATIVE_DOOR.y, REPRESENTATIVE_DOOR.z]}
+    userData={{ illustrative: true, physicalDoorId: null, cycleNumber: door?.cycleNumber ?? null }}>
+    {/* The opaque opening covers merged static leaves without changing the reference asset. */}
+    <mesh raycast={NO_RAYCAST}><boxGeometry args={[1.12, 1.87, .035]} /><meshBasicMaterial color="#05121b" /></mesh>
+    <mesh position={[0, 0, .025]} raycast={NO_RAYCAST}>
+      <boxGeometry args={[1.17, 1.94, .025]} /><meshBasicMaterial ref={outline} color={abnormal ? AMBER : CYAN} wireframe transparent toneMapped={false} />
+    </mesh>
+    {([-1, 1] as const).map(side => <group key={side} ref={side < 0 ? left : right} position={[side * .258, 0, .075]}>
+      <mesh raycast={NO_RAYCAST}><boxGeometry args={[.50, 1.81, .045]} /><meshStandardMaterial color="#9aadb5" metalness={.65} roughness={.3} emissive={abnormal ? AMBER : CYAN} emissiveIntensity={door?.completed ? .16 : .05} /></mesh>
+      <mesh position={[0, .36, .033]} raycast={NO_RAYCAST}><boxGeometry args={[.34, .68, .018]} /><meshStandardMaterial color="#092130" metalness={.5} roughness={.22} /></mesh>
+      <mesh position={[0, -.32, .037]} raycast={NO_RAYCAST}><boxGeometry args={[.49, .09, .01]} /><meshBasicMaterial color={abnormal ? AMBER : CYAN} toneMapped={false} /></mesh>
+      <mesh position={[-side * .15, -.12, .044]} raycast={NO_RAYCAST}><boxGeometry args={[.03, .16, .02]} /><meshStandardMaterial color="#d6e5e8" metalness={.8} roughness={.2} /></mesh>
+    </group>)}
+    {door && <Html center position={[0, 1.4, .25]} zIndexRange={[18, 0]} style={{ pointerEvents: 'none' }}><div className={`reference-door-label${abnormal ? ' is-abnormal' : ''}`}>
+      <span>ILLUSTRATIVE DOOR MOTION</span><strong>Cycle {door.cycleNumber} · {door.operation === 'Unknown' ? 'Movement unavailable' : door.operation}</strong>
+      <small>{door.completed ? abnormal ? 'Classified as abnormal resistance' : 'Classified as Normal' : 'Recorded movement in progress'}</small>
+    </div></Html>}
+  </group>;
+}
+
+function AnalysisSweep({ visualization, reducedMotion }: Pick<ReferenceTrainSceneProps, 'visualization' | 'reducedMotion'>) {
+  if (reducedMotion || visualization?.analysisPhase !== 'scanning') return null;
+  const x = -TRAIN_LENGTH / 2 + unitProgress(visualization.scanProgress) * TRAIN_LENGTH;
+  return <group name="AnalysisProgressSweep" position={[x, 1.7, 0]} userData={{ illustrative: true }}>
+    <mesh rotation={[0, Math.PI / 2, 0]} raycast={NO_RAYCAST}><planeGeometry args={[3.8, 3.5]} /><meshBasicMaterial color={CYAN} transparent opacity={.10} side={THREE.DoubleSide} depthWrite={false} toneMapped={false} /></mesh>
+    <Line points={[[0,-1.55,-1.8],[0,1.75,-1.8],[0,1.75,1.8],[0,-1.55,1.8]]} color={CYAN} transparent opacity={.65} lineWidth={1.5} raycast={NO_RAYCAST} />
+  </group>;
+}
+
 function VerifiedMeasurementPoint({ mapping, result, onSelect }: { mapping: Mapping; result: AnalysisResult | null; onSelect: ReferenceTrainSceneProps['onSelect'] }) {
   const { scene } = useGLTF(MODEL_URL);
   const point = useMemo(() => {
@@ -174,8 +232,9 @@ function VerifiedMeasurementPoint({ mapping, result, onSelect }: { mapping: Mapp
   </group>;
 }
 
-function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, result, xray, onReady }: {
+function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, result, xray, onReady, visualization, reducedMotion }: {
   ids: string[]; subsystem: Subsystem; selectedOrdinal: number | null; onSelect: ReferenceTrainSceneProps['onSelect']; result: AnalysisResult | null; xray: boolean; onReady: () => void;
+  visualization?: SubsystemVisualState; reducedMotion: boolean;
 }) {
   const { scene } = useGLTF(MODEL_URL);
   const frames = useRef(0);
@@ -192,22 +251,22 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, result, 
     return { root, cars: root.children.filter(object => Number.isInteger(object.userData.carOrdinal)), links: root.children.filter(object => !Number.isInteger(object.userData.carOrdinal)) };
   }, [scene]);
   useEffect(() => {
-    for (const car of model.cars) {
+    for (const car of [...model.cars, ...model.links]) {
       car.traverse(object => {
         if (!(object instanceof THREE.Mesh)) return;
         const shell = object.userData.role === 'shell';
         const material = object.material as THREE.MeshStandardMaterial;
-        const ghost = xray && shell;
+        const ghost = (xray && shell) || subsystem === 'shm';
         material.transparent = ghost;
-        material.opacity = ghost ? .13 : 1;
+        material.opacity = ghost ? subsystem === 'shm' ? shell ? .17 : .25 : .13 : 1;
         material.depthWrite = !ghost;
         material.needsUpdate = true;
         object.castShadow = !ghost;
         // Transparent shells do not swallow sensor events; labels remain selectable.
-        object.raycast = xray ? NO_RAYCAST : THREE.Mesh.prototype.raycast;
+        object.raycast = xray || subsystem === 'shm' || subsystem === 'door' ? NO_RAYCAST : THREE.Mesh.prototype.raycast;
       });
     }
-  }, [model, xray]);
+  }, [model, xray, subsystem]);
   useEffect(() => () => {
     document.body.style.cursor = '';
     [...model.cars, ...model.links].forEach(part => part.traverse(object => {
@@ -217,7 +276,25 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, result, 
       }
     }));
   }, [model]);
-  useFrame(() => { if (++frames.current === 2) onReady(); });
+  const glow = useMemo(() => new THREE.Color(CYAN), []);
+  useFrame((_, delta) => {
+    if (++frames.current === 2) onReady();
+    const scanningCar = reducedMotion ? 0 : scanCarOrdinal(visualization);
+    for (const car of model.cars) {
+      const ordinal = car.userData.carOrdinal as number;
+      const rank = result?.subsystem === 'acv' ? result.rankedCars.indexOf(ids[ordinal - 1]) + 1 : 0;
+      const stress = subsystem === 'shm' && visualization?.stress;
+      const intensity = stress ? .1 + (reducedMotion ? 0 : unitProgress(stress.amplitude) * .42) : rankEmphasis(rank) || (scanningCar === ordinal ? .4 : 0);
+      glow.set(rank > 0 && rank <= 3 ? AMBER : CYAN);
+      car.traverse(object => {
+        if (!(object instanceof THREE.Mesh) || object.userData.role !== 'shell') return;
+        const material = object.material as THREE.MeshStandardMaterial;
+        if (material.name === 'lamp' || material.name === 'tail') return;
+        material.emissive.lerp(glow, reducedMotion ? 1 : Math.min(1, delta * 6));
+        material.emissiveIntensity = THREE.MathUtils.damp(material.emissiveIntensity, intensity, reducedMotion ? 1000 : 7, delta);
+      });
+    }
+  });
   return <group name="EightCarReferenceConsist" userData={{ carCount: CAR_COUNT, schematic: true }}>
     {model.cars.map((car, index) => {
       const ordinal = index + 1;
@@ -229,13 +306,17 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, result, 
           onPointerOut={() => { setHoveredCar(null); document.body.style.cursor = ''; }}
           onClick={(event: ThreeEvent<MouseEvent>) => { event.stopPropagation(); onSelect({ kind: 'car', ordinal, carId: ids[index] }); }}
         />
-        <Html center position={[carCenterX(ordinal), 4.04, 0]} zIndexRange={[15, 0]}>
-          <button className={`reference-car-label${selected || hoveredCar === ordinal ? ' is-selected' : ''}${rank === 1 ? ' is-ranked-first' : ''}`}
+        {(subsystem === 'acv' || subsystem === 'rail') && <Html center position={[carCenterX(ordinal), 4.04, 0]} zIndexRange={[15, 0]}>
+          <button className={`reference-car-label${selected || hoveredCar === ordinal ? ' is-selected' : ''}${rank > 0 ? ` is-ranked is-rank-${rank}` : ''}${!reducedMotion && scanCarOrdinal(visualization) === ordinal ? ' is-scanning' : ''}`}
+            data-rank={rank || undefined}
             aria-label={`Focus car ${ids[index]}`} aria-pressed={selected} title={`Car ${ids[index]} · schematic order ${ordinal}${rank > 0 ? ` · ACV case rank ${rank}` : ''}`}
             onClick={() => onSelect({ kind: 'car', ordinal, carId: ids[index] })}>
             <span>CAR {ids[index]}</span>{subsystem === 'acv' && <b>{rank > 0 ? `#${rank}` : 'ACV'}</b>}
           </button>
-        </Html>
+        </Html>}
+        {subsystem === 'acv' && rank > 0 && <mesh position={[carCenterX(ordinal), 3.57, 0]} raycast={NO_RAYCAST}>
+          <boxGeometry args={[7.8, .025, 1.3]} /><meshBasicMaterial color={rank <= 3 ? AMBER : CYAN} transparent opacity={rankEmphasis(rank)} depthWrite={false} toneMapped={false} />
+        </mesh>}
         {selected && <Line points={[[carCenterX(ordinal)-4.6,.015,-1.6],[carCenterX(ordinal)+4.6,.015,-1.6],[carCenterX(ordinal)+4.6,.015,1.6],[carCenterX(ordinal)-4.6,.015,1.6],[carCenterX(ordinal)-4.6,.015,-1.6]]} color={CYAN} transparent opacity={.45} lineWidth={1} raycast={NO_RAYCAST} />}
       </group>;
     })}
@@ -248,13 +329,18 @@ function ReferenceRails({ subsystem, result, selection, onSelect }: Pick<Referen
     {RAIL_SIDES.map(({ side, z }) => {
       const predicted = subsystem === 'rail' && result?.subsystem === 'rail' && result.prediction === side;
       const selected = selection.kind === 'railSide' && selection.side === side;
-      return <mesh key={side} name={side === 'Side I' ? 'RailSide_I' : 'RailSide_II'} position={[0, .015, z]}
+      return <group key={side}>
+      <mesh name={side === 'Side I' ? 'RailSide_I' : 'RailSide_II'} position={[0, .015, z]}
         userData={{ side, predictionScope: 'recording' }}
         onClick={(event: ThreeEvent<MouseEvent>) => { if (subsystem !== 'rail') return; event.stopPropagation(); onSelect({ kind: 'railSide', side }); }}
         onPointerOver={(event: ThreeEvent<PointerEvent>) => { if (subsystem !== 'rail') return; event.stopPropagation(); document.body.style.cursor = 'pointer'; }} onPointerOut={() => { document.body.style.cursor = ''; }}>
         <boxGeometry args={[TRAIN_LENGTH + 9, .10, predicted || selected ? .13 : .08]} />
         <meshStandardMaterial color={predicted ? AMBER : selected ? CYAN : '#536875'} emissive={predicted ? AMBER : selected ? CYAN : '#000000'} emissiveIntensity={predicted ? .48 : selected ? .25 : 0} metalness={.7} roughness={.3} />
-      </mesh>;
+      </mesh>
+      {predicted && <Line points={Array.from({ length: 241 }, (_, index) => [-TRAIN_LENGTH / 2 + index / 240 * TRAIN_LENGTH, .10, z + Math.sin(index * .62) * .055] as [number, number, number])}
+        color={AMBER} transparent opacity={.67} lineWidth={1.25} raycast={NO_RAYCAST} />}
+      {subsystem === 'rail' && <Html center position={[-TRAIN_LENGTH / 2 - 3.7, .25, z * 1.7]} zIndexRange={[12, 0]}><button className={`reference-rail-label${predicted ? ' is-predicted' : ''}`} onClick={() => onSelect({ kind: 'railSide', side })} aria-label={`Focus ${side} rail`}>{side.toUpperCase()}</button></Html>}
+      </group>;
     })}
   </group>;
 }
@@ -287,18 +373,19 @@ function ReferenceEnvironment() {
 }
 
 interface CameraGoal { position: THREE.Vector3; target: THREE.Vector3; focusOrdinal: number | null; active: boolean; snap: boolean }
-function ReferenceCamera({ subsystem, selection, ids, fitKey, reducedMotion }: {
+function ReferenceCamera({ subsystem, selection, ids, fitKey, reducedMotion, visualization }: {
   subsystem: Subsystem; selection: ComponentSelection; ids: string[]; fitKey: number; reducedMotion: boolean;
+  visualization?: SubsystemVisualState;
 }) {
   const controls = useRef<OrbitControlsImpl>(null);
   const { camera, size } = useThree();
-  const focusOrdinal = selectedCarOrdinal(selection, ids);
+  const focusOrdinal = subsystem === 'shm' ? null : selectedCarOrdinal(selection, ids);
   const fit = useRef(fitKey);
   const initialised = useRef(false);
   const goal = useRef<CameraGoal>({ position: new THREE.Vector3(-25,22,80), target: new THREE.Vector3(0,1.5,0), focusOrdinal: null, active: false, snap: true });
   const setGoal = (ordinal: number | null) => {
     if (!(camera instanceof THREE.PerspectiveCamera)) return;
-    const side = ordinal && selection.kind === 'axleBox' && selection.position % 2 === 1 ? -1 : 1;
+    const side = (ordinal && selection.kind === 'axleBox' && selection.position % 2 === 1) || (selection.kind === 'railSide' && selection.side === 'Side I') ? -1 : 1;
     const elevation = subsystem === 'acv' ? .54 : subsystem === 'rail' ? .30 : subsystem === 'door' ? .29 : .40;
     const direction = new THREE.Vector3(ordinal ? -.48 : -.16, elevation, side).normalize();
     // A small longitudinal offset balances perspective without changing carriage proportions.
@@ -316,6 +403,11 @@ function ReferenceCamera({ subsystem, selection, ids, fitKey, reducedMotion }: {
     goal.current = { position: target.clone().addScaledVector(direction, distance), target, focusOrdinal: ordinal, active: true, snap: !initialised.current };
   };
   useEffect(() => { setGoal(focusOrdinal); }, [selection, focusOrdinal, subsystem, size.width, size.height]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (subsystem !== 'door' || !visualization?.door) return;
+    const target = new THREE.Vector3(carCenterX(REPRESENTATIVE_DOOR.carOrdinal) + REPRESENTATIVE_DOOR.localX, 1.8, 1.2);
+    goal.current = { position: target.clone().add(new THREE.Vector3(-2.1, 1.6, Math.max(7, 5.3 * size.height / Math.max(size.width, 1)))), target, focusOrdinal: REPRESENTATIVE_DOOR.carOrdinal, active: true, snap: !initialised.current };
+  }, [subsystem, visualization?.door?.cycleNumber, size.width, size.height]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (fit.current !== fitKey) { fit.current = fitKey; setGoal(null); }
   }, [fitKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -337,7 +429,7 @@ function ReferenceCamera({ subsystem, selection, ids, fitKey, reducedMotion }: {
       control.target.z = THREE.MathUtils.clamp(control.target.z,-2,2);
     }
   });
-  return <OrbitControls ref={controls} makeDefault target={[0,1.6,0]} enableDamping={!reducedMotion} dampingFactor={.08} minDistance={9} maxDistance={240}
+  return <OrbitControls ref={controls} makeDefault target={[0,1.6,0]} enableDamping={!reducedMotion} dampingFactor={.08} minDistance={subsystem === 'door' ? 5 : 9} maxDistance={240}
     minPolarAngle={Math.PI*.19} maxPolarAngle={Math.PI*.48} minAzimuthAngle={-Math.PI+.04} maxAzimuthAngle={Math.PI-.04}
     panSpeed={.35} rotateSpeed={.4} zoomSpeed={.65} onStart={() => { goal.current.active = false; }} />;
 }
@@ -365,8 +457,8 @@ function DetachedRecording({ subsystem, mapping, source, result, ids, onSelect }
   return <button className="reference-detached" onClick={() => onSelect({kind:'recording'})} aria-label={subsystem === 'door' ? 'Inspect unmapped door stream' : 'Inspect unlocated stress recording'}>
     <span className="reference-detached__icon" aria-hidden="true">{subsystem === 'door' ? '▥' : '◇'}</span>
     <span className="reference-detached__eyebrow">{subsystem === 'door' ? 'DOOR RECORDING' : 'STRUCTURAL RECORDING'}</span>
-    <strong>{subsystem === 'door' ? 'Door stream — location unmapped' : 'Measurement location not supplied'}</strong>
-    <span>{mapping.status === 'unmapped' ? mapping.reason : 'No verified reference geometry association is available.'}</span>
+    <strong>{subsystem === 'door' ? 'Illustrative door motion' : 'Measurement location not supplied'}</strong>
+    <span>{subsystem === 'door' ? 'Physical door identity unavailable' : 'Uniform stress pulse · explanatory, not a measured spatial distribution'}</span>
     <span className="reference-detached__source">{source?.fileName ?? 'Select a recording'}</span>
     {result?.subsystem === 'shm' && <span className="reference-detached__damage">Predicted damage <b>{formatDamage(result.predictedDamage)}</b><small>This recording / stress segment</small></span>}
     <span className="reference-detached__action">Inspect source fields <span aria-hidden="true">↗</span></span>
@@ -376,17 +468,25 @@ function DetachedRecording({ subsystem, mapping, source, result, ids, onSelect }
 function ReferenceFallback({ ids, selectedOrdinal, ...props }: ReferenceTrainSceneProps & { ids: string[]; selectedOrdinal: number | null }) {
   const result = scopedResult(props);
   const prediction = result?.subsystem === 'rail' ? result.prediction : null;
+  const door = props.visualization?.door;
+  const opening = doorOpeningFraction(door, props.reducedMotion);
+  const focusedCar = scanCarOrdinal(props.visualization);
   return <div className="reference-fallback" role="group" aria-label="Eight-car reference schematic">
     <div className="reference-fallback__heading"><span>INTERACTIVE REFERENCE SCHEMATIC</span><small>3D unavailable · component selection remains available</small></div>
     <div className="reference-fallback__cars">{ids.map((id,index) => {
       const rank = result?.subsystem === 'acv' ? result.rankedCars.indexOf(id) + 1 : 0;
-      return <button type="button" key={id} aria-label={`Focus car ${id}`} aria-pressed={selectedOrdinal === index+1} className={`reference-fallback__car${selectedOrdinal === index+1 ? ' is-selected' : ''}${rank===1 ? ' is-ranked-first' : ''}`} onClick={()=>props.onSelect({kind:'car',carId:id,ordinal:index+1})}><span>CAR {id}</span><i /><small>{rank>0 ? `ACV rank #${rank}` : 'Reference'}</small></button>;
+      return <button type="button" key={id} aria-label={`Focus car ${id}`} aria-pressed={selectedOrdinal === index+1} disabled={props.subsystem === 'shm' || props.subsystem === 'door'} className={`reference-fallback__car${selectedOrdinal === index+1 ? ' is-selected' : ''}${rank > 0 ? ` is-ranked is-rank-${rank}` : ''}${!props.reducedMotion && focusedCar === index + 1 ? ' is-scanning' : ''}`} data-rank={rank || undefined} style={{ '--rank-strength': rankEmphasis(rank) } as CSSProperties} onClick={()=>props.onSelect({kind:'car',carId:id,ordinal:index+1})}><span>{props.subsystem === 'door' || props.subsystem === 'shm' ? 'REFERENCE' : `CAR ${id}`}</span><i /><small>{rank>0 ? `ACV rank #${rank}` : props.subsystem === 'shm' ? 'Unlocated' : 'Reference'}</small></button>;
     })}</div>
+    {props.subsystem === 'door' && door && <div className={`reference-fallback__door${completedDoorAbnormal(door) ? ' is-abnormal' : ''}`} aria-label={`Illustrative ${door.operation} movement, cycle ${door.cycleNumber}`} style={{ '--door-opening': `${opening * 37}px` } as CSSProperties}>
+      <div className="reference-fallback__door-frame"><i /><i /></div><span>Cycle {door.cycleNumber} · {door.operation}<small>{door.completed ? `Classified as ${door.prediction}` : 'Recorded movement in progress'}</small></span>
+    </div>}
+    {props.subsystem === 'rail' && <div className="reference-fallback__sensor-strip" role="img" aria-label="64 reference sensor nodes, eight per carriage">{ids.map((id,index) => <div key={id}>{RAIL_AXLE_BOXES.filter(anchor => anchor.carOrdinal === index + 1).map(anchor => <i key={anchor.id} className={`${prediction === anchor.side ? 'is-side-member ' : ''}${!props.reducedMotion && focusedCar === index + 1 ? 'is-scanning' : ''}`} title={`Car ${id} · P${anchor.position} · ${anchor.side}`} />)}</div>)}</div>}
     {props.subsystem === 'rail' && <div className="reference-fallback__rails">{RAIL_SIDES.map(({side})=><button key={side} className={prediction===side ? 'is-predicted' : ''} onClick={()=>props.onSelect({kind:'railSide',side})} aria-label={`Select reference rail ${side}`}><i />{side}<i /></button>)}</div>}
     {props.subsystem === 'rail' && selectedOrdinal && <div className="reference-fallback__axles" role="group" aria-label={`Car ${selectedOrdinal} axle boxes`}>
       {(['Side I','Side II'] as RailSide[]).map(side=><div key={side}><span>{side}</span>{RAIL_AXLE_BOXES.filter(anchor=>anchor.carOrdinal===selectedOrdinal&&anchor.side===side).map(anchor=><button key={anchor.id} aria-label={`Select car ${anchor.carOrdinal} axle box ${anchor.position}, ${anchor.side}`} aria-pressed={props.selection.kind==='axleBox'&&props.selection.position===anchor.position} className={`${prediction===side?'is-side-member ':''}${props.selection.kind==='axleBox'&&props.selection.position===anchor.position?'is-selected':''}`} onClick={()=>props.onSelect({kind:'axleBox',carOrdinal:anchor.carOrdinal,position:anchor.position})}>P{anchor.position}</button>)}</div>)}
     </div>}
     {props.subsystem==='rail'&&props.selection.kind==='axleBox'&&<div className="reference-fallback__callout"><RailCallout anchor={RAIL_AXLE_BOXES[(props.selection.carOrdinal-1)*8+props.selection.position-1]} source={props.source} result={result} cursorLabel={props.cursorLabel} sensorReadout={props.sensorReadout}/></div>}
+    {(props.subsystem === 'door' || props.subsystem === 'shm') && <DetachedRecording subsystem={props.subsystem} mapping={props.mapping} source={props.source} result={result} ids={ids} onSelect={props.onSelect} />}
   </div>;
 }
 
@@ -394,13 +494,18 @@ export function ReferenceTrainScene(props: ReferenceTrainSceneProps) {
   const [available,setAvailable] = useState(supportsWebGL);
   const [ready,setReady] = useState(false);
   const ids = useMemo(()=>referenceCarIds(props.subsystem==='acv'||props.subsystem==='rail' ? props.carIds : []),[props.carIds,props.subsystem]);
-  const selectedOrdinal = selectedCarOrdinal(props.selection,ids);
-  const result = scopedResult(props);
+  const selectedOrdinal = props.subsystem === 'shm' || props.subsystem === 'door' ? null : selectedCarOrdinal(props.selection,ids);
+  const result = props.visualization?.analysisPhase === 'scanning' ? null : scopedResult(props);
   const source = props.source ?? result?.source;
   const fallback = <ReferenceFallback {...props} result={result} source={source} ids={ids} selectedOrdinal={selectedOrdinal}/>;
   const railClass = result?.subsystem==='rail' ? result.prediction : null;
   const mappedContext = props.subsystem==='acv'||props.subsystem==='rail';
-  return <div className="reference-train-scene" role="group" aria-label="Eight-car dataset reference layout" data-ready={!available||ready} data-renderer={available?'webgl':'schematic'} data-car-count={8} data-axle-box-count={props.subsystem==='rail'?64:0} data-layer={props.subsystem} data-selected-car={selectedOrdinal??''} data-rail-class={railClass??'uncomputed'}>
+  const phase = props.visualization?.analysisPhase ?? (result ? 'settled' : 'idle');
+  const door = props.visualization?.door;
+  const sceneStatus = phase === 'scanning' ? `Reviewing recorded evidence · visual scan ${Math.round(unitProgress(props.visualization?.scanProgress ?? 0) * 100)}%` : props.subsystem === 'acv' && result ? 'Scan complete · relative leak-likelihood ranking' : railClass === 'Normal' ? 'No corrugation signature detected' : railClass ? `Corrugation signature detected — ${railClass}` : props.subsystem === 'door' && door ? door.completed ? `Cycle ${door.cycleNumber} · classified as ${door.prediction}` : `Cycle ${door.cycleNumber} · replaying recorded movement` : props.subsystem === 'shm' ? 'Structural reference · physical sensor location unavailable' : 'Select a recording to analyse';
+  return <div className="reference-train-scene" role="group" aria-label="Eight-car dataset reference layout" data-ready={!available||ready} data-renderer={available?'webgl':'schematic'} data-car-count={8} data-axle-box-count={props.subsystem==='rail'?64:0} data-layer={props.subsystem} data-selected-car={selectedOrdinal??''} data-rail-class={railClass??'uncomputed'} data-analysis-phase={phase} data-reduced-motion={props.reducedMotion} data-door-completed={door?.completed ?? false}
+    style={{ '--stress-amplitude': props.reducedMotion ? 0 : unitProgress(props.visualization?.stress?.amplitude ?? 0) } as CSSProperties}>
+    <div className={`reference-scene-status${phase === 'scanning' ? ' is-scanning' : ''}${(railClass && railClass !== 'Normal') || completedDoorAbnormal(door) ? ' is-amber' : ''}`}><i /><span>{sceneStatus}</span></div>
     <div className="reference-train-stage">
       {available ? <ReferenceBoundary fallback={fallback} onError={()=>setAvailable(false)}><Suspense fallback={<div className="reference-loading"><i/>Loading eight-car reference geometry</div>}>
         <Canvas shadows dpr={[1,1.5]} camera={{position:[-25,22,80],fov:35,near:.1,far:500}} gl={{antialias:true,alpha:true,powerPreference:'high-performance'}}>
@@ -409,20 +514,22 @@ export function ReferenceTrainScene(props: ReferenceTrainSceneProps) {
           <ReferenceEnvironment/>
           <ReferenceDirection selectedOrdinal={selectedOrdinal}/>
           <ReferenceRails subsystem={props.subsystem} result={result} selection={props.selection} onSelect={props.onSelect}/>
-          <ReferenceGeometry ids={ids} subsystem={props.subsystem} selectedOrdinal={selectedOrdinal} onSelect={props.onSelect} result={result} xray={props.xray} onReady={()=>setReady(true)}/>
-          {props.subsystem==='rail'&&<AxleBoxLayer xray={props.xray} selectedOrdinal={selectedOrdinal} selection={props.selection} onSelect={props.onSelect} result={result} source={source} cursorLabel={props.cursorLabel} sensorReadout={props.sensorReadout}/>}
+          <ReferenceGeometry ids={ids} subsystem={props.subsystem} selectedOrdinal={selectedOrdinal} onSelect={props.onSelect} result={result} xray={props.xray} visualization={props.visualization} reducedMotion={props.reducedMotion} onReady={()=>setReady(true)}/>
+          {(props.subsystem === 'acv' || props.subsystem === 'rail') && <AnalysisSweep visualization={props.visualization} reducedMotion={props.reducedMotion} />}
+          {props.subsystem==='rail'&&<AxleBoxLayer xray={props.xray} selectedOrdinal={selectedOrdinal} selection={props.selection} onSelect={props.onSelect} result={result} source={source} cursorLabel={props.cursorLabel} sensorReadout={props.sensorReadout} visualization={props.visualization} reducedMotion={props.reducedMotion}/>}
           {props.subsystem==='door'&&<MappedDoor mapping={props.mapping} ids={ids} onSelect={props.onSelect}/>}
+          {props.subsystem==='door'&&!resolveDoor(props.mapping, ids)&&<IllustrativeDoor visualization={props.visualization} reducedMotion={props.reducedMotion} />}
           {props.subsystem==='shm'&&<VerifiedMeasurementPoint mapping={props.mapping} result={result} onSelect={props.onSelect}/>}
-          <ReferenceCamera subsystem={props.subsystem} selection={props.selection} ids={ids} fitKey={props.fitKey} reducedMotion={props.reducedMotion}/>
+          <ReferenceCamera subsystem={props.subsystem} selection={props.selection} ids={ids} fitKey={props.fitKey} reducedMotion={props.reducedMotion} visualization={props.visualization}/>
         </Canvas>
       </Suspense></ReferenceBoundary> : fallback}
       <div className="reference-vignette" aria-hidden="true"/>
     </div>
-    <DetachedRecording subsystem={props.subsystem} mapping={props.mapping} source={source} result={result} ids={ids} onSelect={props.onSelect}/>
+    {available && <DetachedRecording subsystem={props.subsystem} mapping={props.mapping} source={source} result={result} ids={ids} onSelect={props.onSelect}/>}
     <div className="reference-scene-caption"><span>{mappedContext ? props.subsystem==='acv' ? props.source && props.carIds.length === 8 ? 'Stable schematic car order · identity from case headers' : 'No case selected · schematic car placeholders' : 'Figure 2 reference · 8 cars / 64 axle boxes' : 'Reference layout — asset mapping not supplied'}</span><span>Reference travel −X · schematic dimensions</span></div>
     {props.subsystem==='rail'&&<div className="reference-rail-key" role="group" aria-label="Recording-level reference rails">
       {RAIL_SIDES.map(({side})=><button key={side} className={railClass===side?'is-predicted':''} onClick={()=>props.onSelect({kind:'railSide',side})} aria-label={`Select reference rail ${side}`} aria-pressed={props.selection.kind==='railSide'&&props.selection.side===side}><i/>{side}<small>{side==='Side I'?'−Z / odd positions':'+Z / even positions'}</small></button>)}
-      <span>{railClass && railClass!=='Normal' ? 'Amber rail = predicted side for this recording; not defect extent.' : railClass==='Normal' ? 'Normal is the recording class; not a component-health assessment.' : 'Reference rails · prediction not computed'}</span>
+      <span>{railClass && railClass!=='Normal' ? 'Illustrative rail-side highlight · recording-level class, no exact track location' : railClass==='Normal' ? 'Normal is the recording class; not a component-health assessment.' : 'Reference rails · prediction not computed'}</span>
     </div>}
   </div>;
 }

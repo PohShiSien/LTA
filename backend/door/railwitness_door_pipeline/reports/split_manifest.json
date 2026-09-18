@@ -1,0 +1,202 @@
+{
+  "development_segments_1based": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88
+  ],
+  "final_holdout_segments_1based": [
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110
+  ],
+  "development_folds": [
+    {
+      "fold": 1,
+      "training_cycles_1based": [
+        1,
+        19
+      ],
+      "validation_cycles_1based": [
+        21,
+        37
+      ],
+      "purged_cycles": 1,
+      "segmentation_iou_f1": 1.0,
+      "segmenter": {
+        "threshold_ms": 564.2339940131221,
+        "nominal_step_ms": 20.0,
+        "max_training_within_gap_ms": 20.0,
+        "min_training_between_gap_ms": 15918.0,
+        "min_training_rows": 137,
+        "max_training_rows": 187
+      }
+    },
+    {
+      "fold": 2,
+      "training_cycles_1based": [
+        1,
+        36
+      ],
+      "validation_cycles_1based": [
+        38,
+        54
+      ],
+      "purged_cycles": 1,
+      "segmentation_iou_f1": 1.0,
+      "segmenter": {
+        "threshold_ms": 451.9955751995809,
+        "nominal_step_ms": 20.0,
+        "max_training_within_gap_ms": 20.0,
+        "min_training_between_gap_ms": 10215.0,
+        "min_training_rows": 137,
+        "max_training_rows": 187
+      }
+    },
+    {
+      "fold": 3,
+      "training_cycles_1based": [
+        1,
+        53
+      ],
+      "validation_cycles_1based": [
+        55,
+        71
+      ],
+      "purged_cycles": 1,
+      "segmentation_iou_f1": 1.0,
+      "segmenter": {
+        "threshold_ms": 451.9955751995809,
+        "nominal_step_ms": 20.0,
+        "max_training_within_gap_ms": 20.0,
+        "min_training_between_gap_ms": 10215.0,
+        "min_training_rows": 137,
+        "max_training_rows": 190
+      }
+    },
+    {
+      "fold": 4,
+      "training_cycles_1based": [
+        1,
+        70
+      ],
+      "validation_cycles_1based": [
+        72,
+        88
+      ],
+      "purged_cycles": 1,
+      "segmentation_iou_f1": 1.0,
+      "segmenter": {
+        "threshold_ms": 451.9955751995809,
+        "nominal_step_ms": 20.0,
+        "max_training_within_gap_ms": 20.0,
+        "min_training_between_gap_ms": 10215.0,
+        "min_training_rows": 137,
+        "max_training_rows": 190
+      }
+    }
+  ]
+}

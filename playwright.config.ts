@@ -16,10 +16,15 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  webServer: {
+  webServer: [{
+    command: `${process.env.RAILWITNESS_DOOR_PYTHON || 'backend/door/.venv/bin/python'} -m uvicorn app:app --app-dir backend/door --host 127.0.0.1 --port 8000`,
+    url: 'http://127.0.0.1:8000/api/health',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  }, {
     command: 'npm run dev',
     url: 'http://127.0.0.1:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
-  },
+  }],
 });
