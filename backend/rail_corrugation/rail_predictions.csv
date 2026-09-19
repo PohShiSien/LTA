@@ -1,5 +1,13 @@
 file_id,prediction
 Test1.csv,Normal
+Test2.csv,Normal
+Test3.csv,Normal
+Test4.csv,Normal
+Test5.csv,Side I
+Test6.csv,Normal
+Test7.csv,Normal
+Test8.csv,Side I
+Test9.csv,Normal
 Test10.csv,Side I
 Test11.csv,Normal
 Test12.csv,Normal
@@ -10,7 +18,6 @@ Test16.csv,Normal
 Test17.csv,Normal
 Test18.csv,Normal
 Test19.csv,Normal
-Test2.csv,Normal
 Test20.csv,Normal
 Test21.csv,Normal
 Test22.csv,Side I
@@ -21,7 +28,6 @@ Test26.csv,Side II
 Test27.csv,Normal
 Test28.csv,Normal
 Test29.csv,Normal
-Test3.csv,Normal
 Test30.csv,Normal
 Test31.csv,Normal
 Test32.csv,Normal
@@ -32,7 +38,6 @@ Test36.csv,Normal
 Test37.csv,Normal
 Test38.csv,Normal
 Test39.csv,Normal
-Test4.csv,Normal
 Test40.csv,Normal
 Test41.csv,Normal
 Test42.csv,Normal
@@ -43,7 +48,6 @@ Test46.csv,Normal
 Test47.csv,Normal
 Test48.csv,Normal
 Test49.csv,Normal
-Test5.csv,Side I
 Test50.csv,Normal
 Test51.csv,Normal
 Test52.csv,Normal
@@ -54,7 +58,6 @@ Test56.csv,Normal
 Test57.csv,Normal
 Test58.csv,Normal
 Test59.csv,Normal
-Test6.csv,Normal
 Test60.csv,Normal
 Test61.csv,Normal
 Test62.csv,Normal
@@ -64,6 +67,3 @@ Test65.csv,Normal
 Test66.csv,Side II
 Test67.csv,Normal
 Test68.csv,Normal
-Test7.csv,Normal
-Test8.csv,Side I
-Test9.csv,Normal
