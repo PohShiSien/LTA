@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import datetime as dt
-import hashlib
 import io
 import json
 import math
-import platform
 import zipfile
 from pathlib import Path
 
@@ -17,7 +14,6 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_MODEL = HERE / 'shm_model.joblib'
-VERSION = 'shm-reference-recipe-2026-09-19'
 FORMAT_VERSION = 1
 MODEL_NAME = 'rainflow_miner_reference_recipe'
 
@@ -35,8 +31,6 @@ FEATURE_NAMES = ['stress_mean', 'stress_std', 'stress_rms', 'stress_min', 'stres
 SHM_DAMAGE_FEATURE = FEATURE_NAMES.index(f'range_moment_{SHM_DAMAGE_EXPONENT}')   # 15
 RECIPE = {'skip_first_sample': SHM_SKIP_FIRST_SAMPLE, 'load_classes': SHM_LOAD_CLASSES, 'range_bins': SHM_RANGE_BINS,
           'exponent': SHM_DAMAGE_EXPONENT, 'edge_epsilon': SHM_EDGE_EPSILON, 'damage_feature_index': SHM_DAMAGE_FEATURE}
-EXACT_TOLERANCE = 5e-5      # "label reproduced" threshold (relative)
-SMALL_DAMAGE = 0.07         # per-regime reporting split
 
 
 class DataError(ValueError):
@@ -151,11 +145,16 @@ def cycle_evidence(data):
 
 
 # ---- loading ------------------------------------------------------------------------------------
-def load_series(path: Path) -> tuple[np.ndarray, list[str]]:
+def load_series(path: Path | bytes) -> tuple[np.ndarray, list[str]]:
     """One stress column. A single non-numeric first line (a real header) is dropped; anything else non-numeric is an error."""
-    table = pd.read_csv(path, header=None, dtype=str, skip_blank_lines=True)
+    name = 'Uploaded CSV' if isinstance(path, bytes) else Path(path).name
+    source = io.BytesIO(path) if isinstance(path, bytes) else path
+    try:
+        table = pd.read_csv(source, header=None, dtype=str, skip_blank_lines=True)
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError) as exc:
+        raise DataError(f'{name}: upload a non-empty CSV with one numeric stress column.') from exc
     if table.shape[1] != 1:
-        raise DataError(f'{path.name}: SHM recordings must have exactly one stress column')
+        raise DataError(f'{name}: SHM recordings must have exactly one stress column')
     rows = table.iloc[:, 0].tolist()
     warnings = []
     try:
@@ -166,141 +165,33 @@ def load_series(path: Path) -> tuple[np.ndarray, list[str]]:
     try:
         values = np.asarray([float(v) for v in rows], dtype=float)
     except (TypeError, ValueError) as exc:
-        raise DataError(f'{path.name}: non-numeric sample: {exc}') from exc
+        raise DataError(f'{name}: non-numeric sample: {exc}') from exc
     if len(values) < SHM_MIN_SAMPLES or not np.isfinite(values).all():
-        raise DataError(f'{path.name}: SHM requires at least {SHM_MIN_SAMPLES} finite stress samples')
+        raise DataError(f'{name}: SHM requires at least {SHM_MIN_SAMPLES} finite stress samples')
     return values, warnings
 
 
-# ---- fitting, validation, bundle ----------------------------------------------------------------
-def mape_optimal_scale(y, s):
-    """argmin_k mean|1 - k*s/y|: weighted median of y/s with weights s/y."""
-    ratio = y / s
-    weight = s / y
-    order = np.argsort(ratio)
-    cumulative = np.cumsum(weight[order])
-    return float(ratio[order][np.searchsorted(cumulative, cumulative[-1] / 2)])
-
-
-def leave_one_out(y, s):
-    held = np.empty(len(y))
-    for i in range(len(y)):
-        keep = np.arange(len(y)) != i
-        held[i] = abs(mape_optimal_scale(y[keep], s[keep]) * s[i] - y[i]) / y[i]
-    return held
-
-
-def repeated_kfold(y, s, k=5, reps=20, seed=0):
-    rng = np.random.default_rng(seed)
-    scores = []
-    for _ in range(reps):
-        apes = np.empty(len(y))
-        for fold in np.array_split(rng.permutation(len(y)), k):
-            keep = np.setdiff1d(np.arange(len(y)), fold)
-            apes[fold] = np.abs(mape_optimal_scale(y[keep], s[keep]) * s[fold] - y[fold]) / y[fold]
-        scores.append(apes.mean())
-    return float(np.mean(scores)), float(np.std(scores))
-
-
+# ---- saved-model inference ----------------------------------------------------------------------
 def evaluate_linear_model(model: dict, features) -> float:
     """D = exp(intercept + sum(coef * (f - mean) / scale)) over the feature vector."""
     z = model['intercept'] + sum((v - m) / s * c for v, m, s, c in zip(features, model['mean'], model['scale'], model['coefficients']))
     damage = math.exp(z)
-    if not math.isfinite(damage):
-        raise DataError('The damage model returned a non-finite value for this recording.')
+    if not math.isfinite(damage) or damage <= 0:
+        raise DataError('The damage model returned a non-positive or non-finite value for this recording.')
     return damage
-
-
-def model_id(k: float) -> str:
-    return hashlib.sha256(json.dumps({'recipe': RECIPE, 'k': float(k), 'features': FEATURE_NAMES}, sort_keys=True).encode()).hexdigest()[:16]
-
-
-def sha256_of(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def train(datasets: Path, verbose=False):
-    """Fit and validate on SHM/Train. Returns (bundle, report); writes nothing."""
-    root = Path(datasets) / 'SHM'
-    labels_path = root / 'Train_Labels.csv'
-    labels = list(csv.DictReader(labels_path.open()))
-    names = [row['filename'] for row in labels]
-    y = np.asarray([float(row['damage']) for row in labels])
-    x, lengths, hashes = [], [], []
-    for index, name in enumerate(names):
-        path = root / 'Train' / name
-        values, _ = load_series(path)
-        lengths.append(len(values)); hashes.append(sha256_of(path))
-        x.append(shm_features(values))
-        if verbose or index % 16 == 15 or index + 1 == len(names):
-            print(f'features {index + 1}/{len(names)}', flush=True)
-    x = np.asarray(x)
-    if len(set(lengths)) > 1:
-        print(f'WARNING: training files differ in length ({sorted(set(lengths))}); damage is per segment and is not length-normalised', flush=True)
-
-    s = np.expm1(x[:, SHM_DAMAGE_FEATURE])           # S5 recovered from its log1p feature
-    k = mape_optimal_scale(y, s)
-    fitted = k * s
-    held = leave_one_out(y, s)
-    kf_mean, kf_std = repeated_kfold(y, s)
-    residual_pct = 100 * (y / fitted - 1)
-    exact = int(np.sum(np.abs(fitted - y) / y < EXACT_TOLERANCE))
-    small = y < SMALL_DAMAGE
-    metrics = {'mape': float(held.mean()), 'mapeScore': float(max(0.0, 1 - held.mean())), 'inSampleMape': float(np.mean(np.abs(fitted - y) / y)),
-               'mae': float(np.mean(np.abs(fitted - y))), 'repeatedKFoldMape': kf_mean, 'repeatedKFoldStd': kf_std,
-               'mapeSmallFiles': float(held[small].mean()), 'mapeLargeFiles': float(held[~small].mean()),
-               'exactlyReproduced': exact, 'exactTolerance': EXACT_TOLERANCE, 'n': int(len(y)), 'scale': k}
-    print('SHM VALIDATION', json.dumps(metrics), flush=True)
-    if verbose:
-        print('per-file residual % (label/pred - 1) and leave-one-out APE %:')
-        for i in np.argsort(residual_pct):
-            print(f'  {names[i]:12s} label={y[i]:.6f} pred={fitted[i]:.6f} resid={residual_pct[i]:+.3f}% loo={100*held[i]:.3f}%')
-
-    # Standardised linear form of the fitted model: log D = log k + log1p(S5).
-    mean = x.mean(axis=0)
-    scale = np.where(x.std(axis=0) > 0, x.std(axis=0), 1.0)
-    coefficients = np.zeros(x.shape[1]); coefficients[SHM_DAMAGE_FEATURE] = scale[SHM_DAMAGE_FEATURE]
-    intercept = float(math.log(k) + mean[SHM_DAMAGE_FEATURE])
-    linear_model = {'kind': 'log-linear', 'mean': mean.tolist(), 'scale': scale.tolist(), 'coefficients': coefficients.tolist(),
-                    'intercept': intercept, 'featureCount': int(x.shape[1])}
-    for i in range(len(y)):   # the linear form must reproduce k*(1+S5) for every training file
-        if abs(evaluate_linear_model(linear_model, x[i]) / (k * (1 + s[i])) - 1) > 1e-12:
-            raise RuntimeError('linear form does not reproduce the fitted model')
-    generated = dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')
-    bundle = {'format_version': FORMAT_VERSION, 'model_id': model_id(k), 'model_name': MODEL_NAME, 'version': VERSION,
-              'description': 'Cumulative damage D = k · Σ count·range⁵ from four-point rainflow counting (first sample skipped, 64 load classes, residual closed against itself, 64 range bins). One calibration constant; no learned features.',
-              'recipe': RECIPE, 'feature_names': FEATURE_NAMES,
-              'calibration': {'k': k, 'log_k': float(math.log(k)), 'method': 'MAPE-optimal scale: weighted median of label/S5 with weights S5/label (exact minimiser of MAPE for D = k·S5)'},
-              'linear_model': linear_model, 'validation': metrics,
-              'training': {'n_files': int(len(y)), 'files': names, 'samples_per_file': int(lengths[0]) if len(set(lengths)) == 1 else None,
-                           'range_moment_5_min': float(s.min()), 'range_moment_5_max': float(s.max()),
-                           'labels_filename': labels_path.name, 'labels_sha256': sha256_of(labels_path),
-                           'files_sha256': hashlib.sha256(''.join(hashes).encode()).hexdigest(),
-                           'test_used_for_training_or_selection': False, 'example_submissions_used_for_training': False},
-              'versions': {'python': platform.python_version(), 'numpy': np.__version__, 'pandas': pd.__version__, 'joblib': joblib.__version__},
-              'generated_at_utc': generated}
-    report = {'split': f'leave-one-out, {len(y)} folds (one constant fitted per fold); repeated 5-fold x20 for spread', 'metrics': metrics,
-              'recipe': RECIPE, 'modelId': bundle['model_id'], 'heldOutFiles': names,
-              'residualPercent': {name: round(float(r), 4) for name, r in zip(names, residual_pct)}, 'trainedAt': generated,
-              'referenceCase': {'file': names[0], 'features': x[0].tolist(), 'prediction': evaluate_linear_model(linear_model, x[0]), 'label': float(y[0])}}
-    return bundle, report
-
-
-def save_bundle(bundle: dict, path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(bundle, path, compress=3)
-    return path
 
 
 def load_bundle(path: Path) -> dict:
     path = Path(path)
     if not path.is_file():
-        raise DataError(f'Model not found at {path}. Run `python {Path(__file__).name} train --datasets ...` first.')
+        raise DataError(f'Model not found at {path}. Restore the supplied shm_model.joblib file.')
     bundle = joblib.load(path)   # local, trusted file only
     if bundle.get('format_version') != FORMAT_VERSION or bundle.get('model_name') != MODEL_NAME:
         raise DataError('Unsupported SHM model format.')
     if bundle['recipe'] != RECIPE or bundle['feature_names'] != FEATURE_NAMES:
-        raise DataError('The model was trained with a different counting recipe or feature schema; retrain with this script.')
+        raise DataError('The model was trained with a different counting recipe or feature schema; restore the matching supplied model and prediction script.')
+    if 'linear_model' not in bundle:
+        bundle['linear_model'] = bundle['browser_artifact']
     return bundle
 
 
@@ -330,24 +221,6 @@ def predictions_csv(rows) -> str:
 
 
 # ---- command line -------------------------------------------------------------------------------
-def cmd_train(args):
-    bundle, report = train(args.datasets, verbose=args.verbose)
-    if args.no_write:
-        print('validation only; nothing written', flush=True)
-        return
-    path = save_bundle(bundle, args.model)
-    reloaded = load_bundle(path)
-    first = Path(args.datasets) / 'SHM/Train' / bundle['training']['files'][0]
-    check = predict_values(reloaded, load_series(first)[0])['prediction']
-    if abs(check / report['referenceCase']['prediction'] - 1) > 1e-12:
-        raise RuntimeError('saved bundle does not reproduce the trainer prediction')
-    print(f'wrote {path} (model_id {bundle["model_id"]}, k={bundle["calibration"]["k"]:.6e}, LOO MAPE {bundle["validation"]["mape"]:.4%})', flush=True)
-    if args.report:
-        args.report.parent.mkdir(parents=True, exist_ok=True)
-        args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
-        print(f'wrote {args.report}', flush=True)
-
-
 def cmd_predict(args):
     bundle = load_bundle(args.model)
     source = Path(args.input)
@@ -383,16 +256,9 @@ def cmd_predict(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
-    t = sub.add_parser('train', help='fit, validate and write shm_model.joblib')
-    t.add_argument('--datasets', type=Path, required=True, help='Path to 02_Datasets (containing SHM/Train and SHM/Train_Labels.csv)')
-    t.add_argument('--model', type=Path, default=DEFAULT_MODEL, help='Output bundle path (default: shm_model.joblib next to this script)')
-    t.add_argument('--report', type=Path, help='Optional JSON validation report with per-file residuals')
-    t.add_argument('--no-write', action='store_true', help='Validate only; write nothing')
-    t.add_argument('--verbose', action='store_true', help='Print per-file residuals')
-    t.set_defaults(run=cmd_train)
     p = sub.add_parser('predict', help='predict damage for one CSV or a directory of CSVs')
     p.add_argument('--input', type=Path, required=True)
-    p.add_argument('--output', type=Path, required=True, help='Output CSV path, or a directory receiving shm_predictions.csv')
+    p.add_argument('--output', type=Path, default=HERE / 'shm_predictions.csv', help='Output CSV path, or a directory receiving shm_predictions.csv')
     p.add_argument('--model', type=Path, default=DEFAULT_MODEL)
     p.add_argument('--details', type=Path, help='Optional JSON with per-file evidence, features and warnings')
     p.add_argument('--zip', type=Path, dest='zip_path', help='Optional submission ZIP containing only shm_predictions.csv')

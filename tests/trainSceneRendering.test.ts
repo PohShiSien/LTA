@@ -25,6 +25,7 @@ describe('rendered subsystem train schematic', () => {
     const html = render('rail', { selection: { kind: 'railSide', side: 'Side II' } });
     expect(html).toContain('data-renderer="schematic"');
     expect(html).toContain('data-rail-class="uncomputed"');
+    expect(html).toContain('Rail model · Not analysed');
     const sideButtons = buttons(html).filter(button => button.attributes.includes('aria-label="Select reference rail'));
     expect(sideButtons).toHaveLength(4);
     for (const button of sideButtons) {
@@ -34,6 +35,35 @@ describe('rendered subsystem train schematic', () => {
     expect(sensors).toHaveLength(64);
     for (const sensor of sensors) expect(sensor[3]).toBe(Number(sensor[2]) % 2 === 1 ? 'Side I' : 'Side II');
     expect(html).not.toMatch(/is-predicted|is-side-member|corrugation signature|bearing fault/i);
+  });
+
+  it.each(['Side I', 'Side II'] as const)('highlights only the predicted reference rail for %s, independently of channel selection', prediction => {
+    const selectedSide = prediction === 'Side I' ? 'Side II' : 'Side I';
+    const html = render('rail', { selection: { kind: 'railSide', side: selectedSide }, visualization: { rail: { prediction } } });
+    expect(html).toContain(`data-rail-class="${prediction}"`);
+    expect(html).toContain(`Recording model result · ${prediction}`);
+    expect(html).toContain('Recording-level result · no individual car or axle-box localisation');
+    const sideButtons = buttons(html).filter(button => button.attributes.includes('aria-label="Select reference rail'));
+    expect(sideButtons).toHaveLength(4);
+    for (const button of sideButtons) {
+      const predicted = button.attributes.includes(`aria-label="Select reference rail ${prediction}"`);
+      expect(button.attributes.includes('is-predicted')).toBe(predicted);
+      expect(button.content.includes('Model result')).toBe(predicted);
+      expect(button.attributes.includes('aria-pressed="true"')).toBe(!predicted);
+    }
+    expect(buttons(html).filter(button => button.attributes.includes('reference-fallback__car')).every(button => !button.attributes.includes('is-predicted'))).toBe(true);
+    expect(html.match(/<i title="Car /g)).toHaveLength(64);
+  });
+
+  it('keeps a Normal model result distinct from an unanalysed recording without marking cars healthy', () => {
+    const normal = render('rail', { visualization: { rail: { prediction: 'Normal' } } });
+    expect(normal).toContain('data-rail-class="Normal"');
+    expect(normal).toContain('Recording model result · Normal');
+    expect(normal).not.toMatch(/is-predicted|is-amber|healthy/);
+    const cleared = render('rail', { visualization: undefined });
+    expect(cleared).toContain('data-rail-class="uncomputed"');
+    expect(cleared).toContain('Not analysed');
+    expect(cleared).not.toContain('Recording model result');
   });
 
   it('shows the selected axle-box source fields and recorded values without a prediction', () => {

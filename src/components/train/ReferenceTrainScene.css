@@ -23,6 +23,9 @@
 .reference-rail-key button{pointer-events:auto;display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid #334b58;border-radius:4px;background:#0c1a24e8;color:#b0c4cf;font:9px 'IBM Plex Mono',monospace;cursor:pointer;white-space:nowrap}
 .reference-rail-key button>i{width:14px;height:2px;background:#657f8b}
 .reference-rail-key button>small{font:8px 'DM Sans',sans-serif;color:#637f8f;margin-left:2px}
+.reference-rail-key button>b{font:8px 'DM Sans',sans-serif}
+.reference-rail-key button.is-predicted,.reference-rail-label.is-predicted,.reference-fallback__rails>button.is-predicted{color:#f0b361;border-color:#9f783f}
+.reference-rail-key button.is-predicted>i,.reference-fallback__rails>button.is-predicted>i{background:#f0b361}
 .reference-rail-key>span{margin-left:auto;max-width:340px;text-align:right;color:#627f8f;font-size:8px;line-height:1.5;text-shadow:0 1px 4px #081016}
 .reference-detached{position:absolute;z-index:5;left:24px;bottom:62px;width:300px;display:flex;flex-direction:column;gap:8px;border:1px dashed #425b6c;border-radius:7px;background:#0c1923ed;padding:17px 18px;text-align:left;color:#a6bac6;cursor:pointer;box-shadow:0 10px 40px #0003}
 .reference-detached__icon{position:absolute;right:17px;top:17px;color:#698c9e;font-size:21px;line-height:1}
@@ -44,6 +47,7 @@
 .reference-fallback__callout{margin:15px auto 0}.reference-fallback__callout .reference-callout{width:340px;max-width:100%}.reference-fallback__callout .reference-callout::after{display:none}
 .reference-scene-status{position:absolute;top:18px;left:20px;right:20px;z-index:4;display:flex;align-items:center;gap:8px;color:#9bc4c3;font:9px/1.5 'IBM Plex Mono',monospace;pointer-events:none;text-shadow:0 1px 6px #061016}
 .reference-scene-status>i{width:5px;height:5px;flex:0 0 5px;border-radius:50%;background:#6bc9bb;box-shadow:0 0 8px #63cdb74d}.reference-scene-status.is-amber{color:#e0ba86}.reference-scene-status.is-amber>i{background:#f0b361;box-shadow:0 0 8px #f0b3614d}
+.reference-scene-status.is-neutral{color:#9bafbb}.reference-scene-status.is-neutral>i{background:#8199a7;box-shadow:none}
 .reference-car-label,.reference-fallback__car{transition:border-color .3s,background-color .3s,color .3s,box-shadow .3s,opacity .3s}
 .reference-door-label{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:210px;padding:9px 13px;border:1px solid #447568;border-radius:5px;background:#0a1d23ed;box-shadow:0 6px 24px #0005;color:#b8ded4;white-space:nowrap}
 .reference-door-label>span{font:7px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#79b7a9}.reference-door-label>strong{font:500 11px 'DM Sans',sans-serif}.reference-door-label>small{font:8px 'DM Sans',sans-serif;color:#87aba2}.reference-door-label.is-abnormal{border-color:#a9824c;background:#251f18ef;color:#f1c087}.reference-door-label.is-abnormal>small{color:#d4b184}

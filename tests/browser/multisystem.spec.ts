@@ -7,6 +7,12 @@ const fixtures = resolve('tests/fixtures/recordings');
 const railLines = readFileSync(resolve(fixtures, 'rail-first-samples.csv'), 'utf8').trim().split(/\r?\n/);
 const railCsv = Buffer.from([railLines[0], ...Array.from({ length: 10000 }, (_, index) => railLines[1 + index % (railLines.length - 1)])].join('\n'));
 const railUpload = { name: 'rail-recording.csv', mimeType: 'text/csv', buffer: railCsv };
+const api = process.env.VITE_API_URL || process.env.VITE_DOOR_API_URL || 'http://127.0.0.1:8000';
+const integratedModels = [
+  { subsystem: 'rail', upload: railUpload, rows: 10000 },
+  { subsystem: 'shm', upload: { name: 'shm-stress.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) }, rows: 4 },
+] as const;
+type RecordingAnalysis = { job_id: string; source_name: string; prediction: string | number; summary: { rows: number }; downloads: { csv: string } };
 const resultPanel = (page: Page) => page.getByRole('region', { name: 'Prediction result' });
 const inspector = (page: Page) => page.getByRole('region', { name: 'Evidence inspector' });
 async function navigate(page: Page, label: string) { await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: label, exact: true }).click(); }
@@ -30,10 +36,99 @@ async function expectPendingModel(page: Page) {
   await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeDisabled();
 }
+async function expectReady(page: Page) {
+  await expect(resultPanel(page)).toContainText('Recording ready for analysis');
+  await expect(resultPanel(page).locator('.ms-kind')).toHaveText('Not analysed');
+  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeDisabled();
+}
 
 test.beforeEach(async ({ page }) => { await page.emulateMedia({ reducedMotion: 'reduce' }); });
 
-test('uploaded Rail preserves exact channels while scrubbing and awaits its trained model without fallback', async ({ page }) => {
+for (const { subsystem, upload, rows } of integratedModels) {
+  const title = (prediction: string | number) => subsystem === 'rail' ? `Rail classification: ${prediction}` : `Fatigue damage: ${prediction}`;
+
+  test(`${subsystem} upload runs the supplied model, exports exact backend results, and clears failed reruns`, async ({ page, request }) => {
+    await page.goto(`/#${subsystem}`);
+    await page.getByLabel('Upload recording files').setInputFiles(upload);
+    await expectReady(page);
+    const pending = page.waitForResponse(response => response.url() === `${api}/api/${subsystem}/predict` && response.request().method() === 'POST');
+    await analyse(page);
+    const response = await pending;
+    expect(response.ok()).toBe(true);
+    const analysis: RecordingAnalysis = await response.json();
+    expect(analysis.summary.rows).toBe(rows);
+    expect(analysis.source_name).toBe(upload.name);
+    await expect(resultPanel(page).getByRole('heading', { level: 2 })).toHaveText(title(analysis.prediction));
+    await expect(resultPanel(page).locator('.ms-result-scope')).toHaveText('RECORDING');
+    await expect(resultPanel(page).locator('.ms-result-source')).toContainText(upload.name);
+    if (subsystem === 'rail') {
+      await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-rail-class', String(analysis.prediction));
+      await expect(page.locator('.reference-rail-key .is-predicted')).toHaveCount(analysis.prediction === 'Normal' ? 0 : 1);
+      if (analysis.prediction !== 'Normal') await expect(page.locator('.reference-rail-key .is-predicted')).toContainText(String(analysis.prediction));
+      await expect(inspector(page).getByRole('group', { name: 'Selected signal measurements' })).toContainText('RMS · mean removed');
+    } else {
+      await expect(resultPanel(page).locator('.ms-model-summary')).not.toContainText('fifth range moment');
+      await expect(inspector(page).getByRole('group', { name: 'Selected signal measurements' })).toContainText('Stress range');
+      await expect(page.getByRole('button', { name: 'Play stress replay' })).toBeHidden();
+    }
+    const expectedCsv = await (await request.get(`${api}${analysis.downloads.csv}`)).body();
+    const csv = await csvDownload(page);
+    expect(csv.name).toBe(`${subsystem}_predictions.csv`);
+    expect(Buffer.from(csv.text)).toEqual(expectedCsv);
+    const downloading = page.waitForEvent('download');
+    const archiveResponse = page.waitForResponse(response => response.url() === `${api}/api/${subsystem}/export`);
+    await page.getByRole('button', { name: /predictions.zip/ }).click();
+    const zip = readFileSync((await (await downloading).path())!);
+    expect(zip).toEqual(await (await archiveResponse).body());
+    const entries = unzipSync(zip);
+    expect(Object.keys(entries)).toEqual([`${subsystem}_predictions.csv`]);
+    expect(Buffer.from(entries[`${subsystem}_predictions.csv`])).toEqual(expectedCsv);
+
+    await page.route(`**/api/${subsystem}/predict`, route => route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ detail: 'Trained model is unavailable.' }) }));
+    await page.getByRole('button', { name: 'Run again', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Trained model is unavailable');
+    await expectReady(page);
+    await expect(resultPanel(page).getByRole('heading', { name: title(analysis.prediction), exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
+    if (subsystem === 'rail') await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-rail-class', 'uncomputed');
+  });
+
+  test(`${subsystem} Analyse all preserves each recording result and downloads one combined CSV`, async ({ page, request }) => {
+    await page.goto(`/#${subsystem}`);
+    const names = ['first.csv', 'second.csv'];
+    await page.getByLabel('Upload recording files').setInputFiles(names.map(name => ({ ...upload, name })));
+    await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeDisabled();
+    const responses: Promise<RecordingAnalysis>[] = [];
+    page.on('response', response => {
+      if (response.url() === `${api}/api/${subsystem}/predict` && response.request().method() === 'POST') responses.push(response.json());
+    });
+    await page.getByRole('button', { name: 'Analyse all 2', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeEnabled();
+    const analyses = await Promise.all(responses);
+    expect(analyses.map(analysis => analysis.source_name).sort()).toEqual(names);
+    for (const analysis of analyses) {
+      await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: analysis.source_name });
+      await expect(resultPanel(page).getByRole('heading', { level: 2 })).toHaveText(title(analysis.prediction));
+    }
+    const expected = await request.post(`${api}/api/${subsystem}/export`, { data: { job_ids: analyses.map(analysis => analysis.job_id), format: 'csv' } });
+    expect(expected.ok()).toBe(true);
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'All results CSV', exact: true }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe(`${subsystem}_predictions.csv`);
+    const bytes = readFileSync((await download.path())!);
+    expect(bytes).toEqual(await expected.body());
+    const lines = bytes.toString('utf8').trim().split(/\r?\n/);
+    expect(lines).toHaveLength(3);
+    expect(lines.slice(1).map(line => line.split(',')[0]).sort()).toEqual(names);
+    await page.getByLabel('Upload recording files').setInputFiles({ ...upload, name: 'not-analysed.csv' });
+    await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
+  });
+}
+
+test('uploaded Rail preserves exact channels while scrubbing and waits for an explicit analysis request', async ({ page }) => {
   const predictionRequests: string[] = [];
   page.on('request', request => { if (/\/api\/rail\/predict(?:\?|$)/.test(request.url())) predictionRequests.push(request.url()); });
   await page.goto('/#rail');
@@ -49,14 +144,16 @@ test('uploaded Rail preserves exact channels while scrubbing and awaits its trai
   await channel.locator('summary').click();
   await expect(channel).toContainText('42 (index 41)');
   await expect(channel).toContainText('m/s²');
-  await expectPendingModel(page);
+  await expectReady(page);
   await page.getByRole('slider', { name: 'Recording sample cursor', exact: true }).focus();
   await page.keyboard.press('End');
   await expect(page.locator('.ms-time-control')).toContainText('0.9999 s elapsed');
-  await expectPendingModel(page);
+  await expectReady(page);
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-rail-class', 'uncomputed');
   await page.getByRole('combobox', { name: 'Metric' }).selectOption('column-0');
   await expect(page.getByRole('combobox', { name: 'Metric' }).locator('option:checked')).toHaveText('Rotating speed');
+  await expect(inspector(page).getByRole('group', { name: 'Selected signal measurements' })).toContainText('Selected sample');
+  await expect(inspector(page).getByRole('group', { name: 'Selected signal measurements' })).not.toContainText('RMS');
   await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
   expect(predictionRequests).toEqual([]);
 });
@@ -119,7 +216,7 @@ test('unlocated SHM inspection keeps same-named Door recordings and predictions 
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'Test.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
   await expect(inspector(page).getByRole('heading', { name: 'Measurement location not supplied' })).toBeVisible();
   await expect(page.locator('.ms-unmapped')).toContainText('not assigned to any car or bogie');
-  await expectPendingModel(page);
+  await expectReady(page);
   await expect(page.locator('.ms-damage')).toHaveCount(0);
   const shmKey = await page.getByRole('combobox', { name: 'Selected recording' }).inputValue();
   await navigate(page, 'Doors');
@@ -134,12 +231,12 @@ test('unlocated SHM inspection keeps same-named Door recordings and predictions 
   await navigate(page, 'Structural health');
   await expect(page.locator('.ms-source-context')).toContainText('ps3-shm / Test.csv');
   await expect(page.getByRole('combobox', { name: 'Selected recording' })).toHaveValue(shmKey);
-  await expectPendingModel(page);
+  await expectReady(page);
   await expect(page.locator('.ms-damage')).toHaveCount(0);
   await expect(resultPanel(page)).not.toContainText('door cycles classified');
 });
 
-test('ZIP retains exact analysed Door output while pending-model recordings remain inspection only', async ({ page }) => {
+test('Door ZIP retains exact analysed output while other recordings have not been analysed', async ({ page }) => {
   await page.goto('/#door');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'door-controller.csv'));
   await analyse(page);
@@ -149,8 +246,10 @@ test('ZIP retains exact analysed Door output while pending-model recordings rema
   await expectPendingModel(page);
   await navigate(page, 'Structural health');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'shm-stress.csv'));
-  await expectPendingModel(page);
+  await expectReady(page);
+  await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Synthetic demo', exact: true })).toHaveCount(0);
+  await navigate(page, 'Doors');
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: /predictions.zip/ }).click();
   const archive = await pending;
@@ -167,7 +266,7 @@ test('multiple SHM recordings rehydrate distinct source values after worker cach
   await page.goto('/#shm');
   const names = ['test16.csv', 'test03.csv', 'test01.csv', 'test09.csv'];
   await page.getByLabel('Upload recording files').setInputFiles(names.map((name, index) => ({ name, mimeType: 'text/csv', buffer: Buffer.from([1, 2, 3, 4].map(value => value + index * 10).join('\n')) })));
-  await expect(page.getByRole('button', { name: 'Analyse all 4', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Analyse all 4', exact: true })).toBeEnabled();
   for (const [index, name] of names.entries()) {
     await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: name });
     await expect(page.locator('.ms-source-context')).toContainText(`ps3-shm / ${name}`);
@@ -177,7 +276,7 @@ test('multiple SHM recordings rehydrate distinct source values after worker cach
     await page.keyboard.press('End');
     await expect(inspector(page).locator('.ms-field summary strong')).toHaveText(String(index * 10 + 4));
   }
-  await expectPendingModel(page);
+  await expectReady(page);
   await expect(page.locator('.ms-unmapped')).toContainText('not assigned to any car or bogie');
   await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
   await expect(page.getByRole('alert')).toHaveCount(0);
@@ -193,7 +292,7 @@ test('rejects malformed Rail and distinguishes same-named recordings when removi
 
   await navigate(page, 'Structural health');
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'Test.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
-  await expectPendingModel(page);
+  await expectReady(page);
   await expect(inspector(page).locator('.ms-field summary strong')).toHaveText('-1.134701');
   const originalKey = await page.getByRole('combobox', { name: 'Selected recording' }).inputValue();
 
@@ -201,7 +300,7 @@ test('rejects malformed Rail and distinguishes same-named recordings when removi
   const namedOptions = page.getByRole('combobox', { name: 'Selected recording' }).locator('option', { hasText: /^Test\.csv(?: · source [0-9a-f]{8})?$/ });
   await expect(namedOptions).toHaveCount(2);
   expect(new Set(await namedOptions.allTextContents()).size).toBe(2);
-  await expectPendingModel(page);
+  await expectReady(page);
   const changedKey = await page.getByRole('combobox', { name: 'Selected recording' }).inputValue();
   expect(changedKey).not.toBe(originalKey);
   await expect(inspector(page).locator('.ms-field summary strong')).toHaveText('-2.269402');
@@ -210,7 +309,7 @@ test('rejects malformed Rail and distinguishes same-named recordings when removi
   await expect(page.getByRole('combobox', { name: 'Selected recording' })).toHaveValue(originalKey);
   await expect(page.getByRole('combobox', { name: 'Selected recording' }).locator('option', { hasText: /^Test\.csv$/ })).toHaveCount(1);
   await expect(inspector(page).locator('.ms-field summary strong')).toHaveText('-1.134701');
-  await expectPendingModel(page);
+  await expectReady(page);
   await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
 });
 
@@ -226,7 +325,7 @@ test('keyboard-accessible schematic retains recorded component inspection withou
   await expect(page.getByRole('group', { name: 'Eight-car reference schematic' })).toBeVisible();
   await page.getByLabel('Upload recording files').setInputFiles(railUpload);
   await expect(page.locator('.ms-source-context')).toContainText('10,000 rows · 129 source fields');
-  await expectPendingModel(page);
+  await expectReady(page);
   await page.getByRole('button', { name: 'Select car 3', exact: true }).click();
   await inspector(page).getByRole('button', { name: 'Select car 3 axle box 5', exact: true }).focus();
   await page.keyboard.press('Enter');

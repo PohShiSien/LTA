@@ -129,6 +129,12 @@ describe('frozen Door backend client', () => {
 });
 
 describe('Door AnalysisResult adapter', () => {
+  it('accepts the supplied five-current-feature logistic regression model identity', () => {
+    const value = { ...analysis(), model_name: 'logistic_regression_5_current_features', model_id: 'door5-6d2171ee2079dd86' };
+    expect(validateDoorAnalysis(value)).toBe(value);
+    expect(doorAnalysisResult(value, recording()).model.name).toBe(value.model_name);
+  });
+
   it('retains exact labels, raw timestamp strings, source identity and full inclusive row coverage', () => {
     const source = recording(); const result = doorAnalysisResult(analysis(), source);
     expect(result.source).toEqual(source.source); expect(result.source).not.toBe(source.source);

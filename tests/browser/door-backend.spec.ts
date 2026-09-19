@@ -50,8 +50,8 @@ test('Door upload uses frozen API, displays every cycle, and downloads the exact
   const csv = await downloading;
   expect(csv.suggestedFilename()).toBe('door_predictions.csv');
   expect(readFileSync((await csv.path())!)).toEqual(expectedCsv);
-  await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: 'Structural health', exact: true }).click();
-  await page.getByLabel('Upload recording files').setInputFiles(resolve('tests/fixtures/recordings/shm-stress.csv'));
+  await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: 'ACV', exact: true }).click();
+  await page.getByLabel('Upload recording files').setInputFiles(resolve('tests/fixtures/recordings/acv-basic.xlsx'));
   await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeDisabled();
   await expect(result(page)).toContainText('Waiting for trained model package');
   const archivePending = page.waitForEvent('download');

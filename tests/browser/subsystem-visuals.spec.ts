@@ -94,14 +94,15 @@ test('Door replay advances chronologically and cancels when the selected recordi
   await expect(page.locator('.door-replay-now')).toContainText('Cycle 2 of 3');
 });
 
-test('SHM stress inspection stays unlocated, respects reduced motion, and never invents a pending model result', async ({ page }) => {
+test('SHM stress inspection stays unlocated, respects reduced motion, and waits for explicit analysis', async ({ page }) => {
   await page.goto('/#shm');
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'test99.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
-  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeEnabled();
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-selected-car', '');
   await expect(page.locator('.reference-train-scene')).toContainText('physical sensor location unavailable');
   await expect(page.locator('.multi-shell')).toHaveAttribute('data-reduced-motion', 'true');
   await expect(page.locator('.ms-damage')).toHaveCount(0);
+  await page.locator('.ms-stress-disclosure > summary').click();
   await page.getByRole('button', { name: 'Select car 03', exact: true }).click();
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-selected-car', '');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -115,4 +116,18 @@ test('SHM stress inspection stays unlocated, respects reduced motion, and never 
   await page.getByRole('checkbox', { name: 'Reduce motion', exact: true }).check();
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-reduced-motion', 'true');
   await expect(page.getByRole('button', { name: 'Play stress replay' })).toBeDisabled();
+});
+
+test('SHM cursor reads the original sample even when chart downsampling omits it', async ({ page }) => {
+  const samples = Array.from({ length: 10000 }, () => 0);
+  samples[1] = 7; samples[2] = 100; // The first chart bucket keeps 0 and 100, not the selected 7.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/#shm');
+  await page.getByLabel('Upload recording files').setInputFiles({ name: 'cursor.csv', mimeType: 'text/csv', buffer: Buffer.from(samples.join('\n')) });
+  await page.getByRole('spinbutton', { name: 'Sample number', exact: true }).fill('2');
+  await page.locator('.ms-stress-disclosure > summary').click();
+  await expect(page.getByLabel('Selected stress value')).toHaveText('7');
+  await expect(page.locator('.reference-train-scene')).toHaveCSS('--stress-amplitude', '0.07');
+  await expect(page.getByRole('group', { name: 'Selected signal measurements' })).toContainText('Stress range');
+  await expect(page.getByRole('region', { name: 'Prediction result' })).toContainText('Recording ready for analysis');
 });

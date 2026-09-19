@@ -29,10 +29,10 @@ jobs:
         if: ${{ hashFiles('backend/requirements.txt') != '' }}
         with:
           python-version: '3.13'
-      - name: Check Door service and shipped frozen model
+      - name: Check shared service and supplied models
         if: ${{ hashFiles('backend/requirements.txt') != '' }}
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python -m pip install -r tests/door/requirements.txt
-          python -m pytest tests/door -q
+          python -m pytest tests/door tests/test_model_uploads.py -q

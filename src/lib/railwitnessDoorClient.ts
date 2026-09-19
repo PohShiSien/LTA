@@ -92,7 +92,7 @@ function validCycle(value: unknown): value is DoorCycle {
 export function validateDoorAnalysis(value: unknown): DoorAnalysis {
   contract(record(value), 'analysis object');
   contract(text(value.job_id) && /^[a-zA-Z0-9_-]+$/.test(value.job_id), 'job identifier');
-  contract(value.model_name === 'logistic_regression' && text(value.model_id), 'frozen logistic_regression model identity');
+  contract((value.model_name === 'logistic_regression' || value.model_name === 'logistic_regression_5_current_features') && text(value.model_id), 'supported frozen logistic regression model identity');
   contract(text(value.source_name) && typeof value.source_sha256 === 'string' && /^[a-fA-F0-9]{64}$/.test(value.source_sha256), 'source provenance');
   contract(value.mode === 'offline_completed_cycle_analysis', 'completed-cycle scope');
   contract(record(value.summary), 'summary');

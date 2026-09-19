@@ -25,6 +25,18 @@ describe('recording evidence summaries', () => {
     expect(result.statistics).toMatchObject({ count: 2, missing: 1, peak: 4, mean: 3 });
     expect(result.statistics.rms).toBeCloseTo(Math.sqrt(10));
   });
+  it('removes DC for vibration metrics using every valid converted sample', () => {
+    const rows: Recording['rows'] = [[1001, 'Valid'], [1002, 'Valid'], [1003, 'Valid'], [9999, 'Invalid'], [null], ['bad'], [Infinity]];
+    const result = summarizeSignal(rows, { ...field, displayScale: 2 }, 4, 1);
+    expect(result.statistics).toMatchObject({ count: 3, missing: 4, mean: 2004, peak: 2006, acPeak: 2, minimum: 2002, maximum: 2006 });
+    expect(result.statistics.acRms).toBeCloseTo(Math.sqrt(8 / 3));
+    expect(result.statistics.rms).toBeCloseTo(Math.sqrt((2002 ** 2 + 2004 ** 2 + 2006 ** 2) / 3));
+    expect(summarizeSignal([[1e12 + 1], [1e12 + 2], [1e12 + 3]], field).statistics.acRms).toBeCloseTo(Math.sqrt(2 / 3));
+    expect(summarizeSignal([[5], [5]], field).statistics).toMatchObject({ acRms: 0, acPeak: 0, minimum: 5, maximum: 5 });
+    const empty = summarizeSignal([[null], [NaN], [1e308]], { ...field, displayScale: 10 });
+    expect(empty.statistics).toMatchObject({ count: 0, missing: 3, mean: null, rms: null, peak: null, acRms: null, acPeak: null, minimum: null, maximum: null });
+    expect(empty.points.every(point => point.value === null)).toBe(true);
+  });
   it('locates a known sine frequency and amplitude while removing DC offset', () => {
     const values = Array.from({ length: 1024 }, (_, index) => 5 + 3 * Math.sin(2 * Math.PI * 128 * index / 1024));
     const spectrum = amplitudeSpectrum(values, 1024);

@@ -7,7 +7,7 @@ predict.py — Rail Corrugation inference.
     python predict.py Test                               # positional form also accepted
 
 Loads rail_model.joblib (default: next to this script, or --model PATH), runs every *.csv in --input through the
-same feature pipeline the model was trained with (rail_pipeline.py must sit next to this script), and writes a CSV in
+same self-contained feature pipeline the model was trained with, and writes a CSV in
 the organisers' submission format (04_Example_Submission/rail_predictions.csv):
 
     file_id,prediction
@@ -19,16 +19,15 @@ the organisers' submission format (04_Example_Submission/rail_predictions.csv):
 Pass --probabilities to also write <output stem>_with_probabilities.csv with per-class probabilities for the app.
 """
 import os
-import sys
 import argparse
-import warnings
-import pandas as pd
+import csv
+from pathlib import Path
 from joblib import load
 
 # ---------------------------------------------------------------------------------------------
 # rail_pipeline (inlined so this file is self-contained; identical to rail_pipeline.py)
 # ---------------------------------------------------------------------------------------------
-import os
+import io
 import re
 import glob
 import numpy as np
@@ -52,7 +51,7 @@ def parse_columns(columns):
     """Describe every sensor column: name, type (vib/shock), position, car, side."""
     rows = []
     for c in columns:
-        m = COL_RE.search(c)
+        m = COL_RE.fullmatch(c)
         if m:
             typ, pos, car = m.group(1), int(m.group(2)), int(m.group(3))
             rows.append(dict(name=c, type="vib" if typ == "Vibration" else "shock",
@@ -60,6 +59,43 @@ def parse_columns(columns):
     df = pd.DataFrame(rows)
     if len(df) != 128:
         raise ValueError(f"Expected 128 sensor columns, found {len(df)}")
+    expected = {(typ, car, position) for typ in ('vib', 'shock') for car in range(1, 9) for position in range(1, 9)}
+    if set(zip(df['type'], df['car'], df['position'])) != expected:
+        raise ValueError('Rail requires one vibration and one shock column for every bearing position 1–8 in cars 1–8.')
+    return df
+
+
+def load_recording(source):
+    """Read the native speed + 128-sensor CSV without changing the trained preprocessing."""
+    expected = ['Rotating speed'] + [f'{kind} of bearing in position {position} of car {car}'
+        for car in range(1, 9) for position in range(1, 9) for kind in ('Vibration', 'Shock')]
+    try:
+        raw = source if isinstance(source, bytes) else Path(source).read_bytes()
+        first = next(csv.reader([raw.split(b'\n', 1)[0].decode('utf-8-sig')]), [])
+        try:
+            headerless = bool(first) and all(np.isfinite(float(value)) for value in first)
+        except ValueError:
+            headerless = False
+        df = pd.read_csv(io.BytesIO(raw), header=None if headerless else 0)
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeError, csv.Error) as exc:
+        raise ValueError('Upload a non-empty Rail CSV containing Rotating speed and 128 bearing sensor columns.') from exc
+    normal = lambda value: ' '.join(str(value).lower().split())
+    if len(df.columns) != 129 or (not headerless and list(map(normal, df.columns)) != list(map(normal, expected))):
+        raise ValueError('Rail requires Rotating speed followed by all 128 vibration/shock bearing columns in documented car/position order.')
+    if not df.index.equals(pd.RangeIndex(len(df))):
+        raise ValueError('Rail sample rows must contain exactly 129 values; check for extra columns.')
+    df.columns = expected
+    parse_columns(df.columns)
+    if len(df) < 1024:
+        raise ValueError('Rail requires at least 1024 samples for spectral analysis; upload the complete 10000-row recording.')
+    try:
+        values = df.to_numpy(dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Rail samples must all be numeric.') from exc
+    if not np.isfinite(values).all():
+        raise ValueError('Rail samples must all be finite numbers with no missing values.')
+    if not np.isin(values[:, 0], [0, 1]).all():
+        raise ValueError('Rotating speed must contain the original 0/1 wheel-sensor samples.')
     return df
 
 
@@ -103,7 +139,7 @@ def per_sensor_table(df, col_meta=None):
 
 
 def extract_file(path, col_meta=None):
-    df = pd.read_csv(path)
+    df = load_recording(path)
     t = per_sensor_table(df, col_meta)
     t.insert(0, "file_id", os.path.basename(path))
     t.insert(1, "speed_kmh", speed_kmh(df.iloc[:, 0].values))
@@ -118,38 +154,6 @@ def extract_folder(folder, n_jobs=-1, verbose=0):
     col_meta = parse_columns(pd.read_csv(files[0], nrows=1).columns)
     parts = Parallel(n_jobs=n_jobs, verbose=verbose)(delayed(extract_file)(p, col_meta) for p in files)
     return pd.concat(parts, ignore_index=True)
-
-# ----------------------------------------------------------------------------- baselines
-
-def fit_baseline(sensor_df, normal_file_ids):
-    """Speed-agnostic baseline: per-sensor median of each quantity over moving Normal files."""
-    m = sensor_df["file_id"].isin(normal_file_ids) & (sensor_df["speed_kmh"] >= MOVING_KMH)
-    return sensor_df[m].groupby(["type", "side", "car", "position"])[SENSOR_FEATS].median()
-
-
-def fit_baseline_speed(sensor_df, normal_file_ids):
-    """Speed-adjusted baseline. On moving Normal files, for each quantity q:
-           log q = a[sensor] + b[type, q] * log(speed_kmh)
-    b: one pooled slope per (sensor type, quantity) across the 64 sensors of that type.
-    a: one intercept per sensor (keeps the per-sensor gain correction).
-    Returns {"slope": DataFrame[type x quantity], "intercept": DataFrame[sensor x quantity]}."""
-    key = ["type", "side", "car", "position"]
-    m = sensor_df["file_id"].isin(normal_file_ids) & (sensor_df["speed_kmh"] >= MOVING_KMH)
-    d = sensor_df[m].copy()
-    d["ls"] = np.log(d["speed_kmh"])
-    L = np.log(d[SENSOR_FEATS] + 1e-12)
-    Lc = L - L.groupby([d[k] for k in key]).transform("mean")           # within-sensor demeaning
-    lsc = d["ls"] - d.groupby(key)["ls"].transform("mean")
-    slope = {}
-    for typ, idx in d.groupby("type").groups.items():
-        denom = (lsc.loc[idx] ** 2).sum()
-        slope[typ] = (Lc.loc[idx].mul(lsc.loc[idx], axis=0).sum() / denom) if denom > 0 \
-            else pd.Series(0.0, index=SENSOR_FEATS)
-    slope = pd.DataFrame(slope).T
-    b = d["type"].map(slope.to_dict("index")).apply(pd.Series)[SENSOR_FEATS]
-    resid = L - b.mul(d["ls"], axis=0)
-    intercept = resid.groupby([d[k] for k in key]).median()
-    return {"slope": slope, "intercept": intercept}
 
 # ----------------------------------------------------------------------------- feature building
 
@@ -217,6 +221,8 @@ def predict_sensor_table(sensor_df, bundle):
     """Apply a trained bundle to a per-sensor table. Returns DataFrame[file_id, prediction, p_<class>...]."""
     F = build_features(sensor_df, bundle["baseline"], include_speed=bundle.get("include_speed", True)).set_index("file_id")
     X = F.loc[:, bundle["feature_cols"]].values
+    if not np.isfinite(X).all():
+        raise ValueError('Rail features are not finite; check for constant or invalid bearing signals.')
     proba = bundle["model"].predict_proba(X)
     pred = (proba * bundle.get("class_scale", np.ones(proba.shape[1]))).argmax(1)
     out = pd.DataFrame({"file_id": F.index, "prediction": [bundle["class_order"][i] for i in pred]})
@@ -224,22 +230,17 @@ def predict_sensor_table(sensor_df, bundle):
         out[f"p_{c}"] = proba[:, i].round(4)
     return out.reset_index(drop=True)
 
-# ---------------------------------------------------------------------------------------------
-rp = sys.modules[__name__]        # the code above plays the role of the rail_pipeline module
-# ---------------------------------------------------------------------------------------------
-
-warnings.filterwarnings("ignore")
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUBMISSION_COLUMNS = ["file_id", "prediction"]
 VALID_LABELS = {"Normal", "Side I", "Side II"}
 
 
 def predict_folder(input_dir, bundle, n_jobs=-1):
-    files = rp.sorted_csvs(input_dir)
+    files = sorted_csvs(input_dir)
     if not files:
         raise SystemExit(f"No .csv files found in {input_dir}")
-    sensor = rp.extract_folder(input_dir, n_jobs=n_jobs)
-    pred = rp.predict_sensor_table(sensor, bundle)
+    sensor = extract_folder(input_dir, n_jobs=n_jobs)
+    pred = predict_sensor_table(sensor, bundle)
     # keep the folder's natural file order (Test1, Test2, ..., Test10)
     order = {os.path.basename(f): i for i, f in enumerate(files)}
     return pred.sort_values("file_id", key=lambda s: s.map(order)).reset_index(drop=True)
@@ -272,12 +273,12 @@ def main():
         output = os.path.join(output, "rail_predictions.csv")
 
     if not os.path.exists(a.model):
-        raise SystemExit(f"model not found: {a.model}  (run rail_corrugation_train.py first, or pass --model)")
+        raise SystemExit(f"model not found: {a.model}  (restore the supplied rail_model.joblib, or pass --model)")
     bundle = load(a.model)
     print(f"model: {bundle.get('model_name')} | {len(bundle['feature_cols'])} features | baseline: {bundle.get('baseline_kind')} "
           f"| Side I weight: {bundle.get('class_scale', [1, 1, 1])[1]} | trained {bundle.get('created', '?')}")
 
-    files = rp.sorted_csvs(input_dir)
+    files = sorted_csvs(input_dir)
     print(f"predicting {len(files)} files from {input_dir} ...")
     pred = predict_folder(input_dir, bundle, n_jobs=a.n_jobs)
     validate(pred, files)

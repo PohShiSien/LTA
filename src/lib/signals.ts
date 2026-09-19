@@ -1,7 +1,7 @@
 import type { CellValue, DisplayField, Recording } from '../types/multisystem';
 
 export interface TracePoint { index: number; value: number | null }
-export interface SignalStatistics { count: number; missing: number; rms: number | null; peak: number | null; mean: number | null; startIndex: number; endIndex: number }
+export interface SignalStatistics { count: number; missing: number; rms: number | null; peak: number | null; mean: number | null; acRms?: number | null; acPeak?: number | null; minimum?: number | null; maximum?: number | null; startIndex: number; endIndex: number }
 export interface SpectrumPoint { frequency: number; amplitude: number }
 export interface SignalInspection {
   fieldKey: string;
@@ -19,17 +19,23 @@ export function summarizeSignal(rows: Recording['rows'], field: DisplayField, ma
   const points: TracePoint[] = [];
   const scale = field.displayScale ?? 1;
   const bucketSize = Math.max(1, Math.ceil(rows.length / Math.max(1, Math.floor(maxPoints / 4))));
-  let count = 0, sum = 0, sumSquares = 0, peak = 0;
+  let count = 0, mean = 0, centeredSquares = 0, sumSquares = 0, peak = 0;
+  let minimumValue = Infinity, maximumValue = -Infinity;
   for (let start = 0; start < rows.length; start += bucketSize) {
     const end = Math.min(rows.length, start + bucketSize);
     let minimum: TracePoint | undefined, maximum: TracePoint | undefined, missing: TracePoint | undefined;
     for (let index = start; index < end; index++) {
       const invalid = validityColumnIndex !== undefined && /^invalid$/i.test(String(rows[index][validityColumnIndex]));
       const raw = invalid ? null : numericValue(rows[index][field.columnIndex]);
-      if (raw === null) { missing ??= { index, value: null }; continue; }
-      const value = raw * scale;
+      const value = raw === null ? null : raw * scale;
+      if (value === null || !Number.isFinite(value)) { missing ??= { index, value: null }; continue; }
       const point = { index, value };
-      count++; sum += value; sumSquares += value * value; peak = Math.max(peak, Math.abs(value));
+      count++;
+      const delta = value - mean;
+      mean += delta / count;
+      centeredSquares += delta * (value - mean);
+      sumSquares += value * value; peak = Math.max(peak, Math.abs(value));
+      minimumValue = Math.min(minimumValue, value); maximumValue = Math.max(maximumValue, value);
       if (!minimum || value < minimum.value!) minimum = point;
       if (!maximum || value > maximum.value!) maximum = point;
       if (bucketSize === 1) points.push(point);
@@ -39,13 +45,14 @@ export function summarizeSignal(rows: Recording['rows'], field: DisplayField, ma
       const candidates = [minimum, maximum, missing].filter((point): point is TracePoint => Boolean(point));
       for (const index of [start === 0 ? 0 : -1, end === rows.length ? end - 1 : -1]) if (index >= 0) {
         const invalid = validityColumnIndex !== undefined && /^invalid$/i.test(String(rows[index][validityColumnIndex]));
-        const value = invalid ? null : numericValue(rows[index][field.columnIndex]);
-        candidates.push({ index, value: value === null ? null : value * scale });
+        const raw = invalid ? null : numericValue(rows[index][field.columnIndex]);
+        const value = raw === null ? null : raw * scale;
+        candidates.push({ index, value: value !== null && Number.isFinite(value) ? value : null });
       }
       points.push(...[...new Map(candidates.map(point => [point.index, point])).values()].sort((a, b) => a.index - b.index));
     }
   }
-  return { fieldKey: field.fieldKey, points, statistics: { count, missing: rows.length - count, rms: count ? Math.sqrt(sumSquares / count) : null, peak: count ? peak : null, mean: count ? sum / count : null, startIndex: 0, endIndex: Math.max(0, rows.length - 1) } };
+  return { fieldKey: field.fieldKey, points, statistics: { count, missing: rows.length - count, rms: count ? Math.sqrt(sumSquares / count) : null, peak: count ? peak : null, mean: count ? mean : null, acRms: count ? Math.sqrt(Math.max(0, centeredSquares / count)) : null, acPeak: count ? Math.max(maximumValue - mean, mean - minimumValue) : null, minimum: count ? minimumValue : null, maximum: count ? maximumValue : null, startIndex: 0, endIndex: Math.max(0, rows.length - 1) } };
 }
 
 /** Single-sided, coherent-gain corrected Hann-window amplitude spectrum. */

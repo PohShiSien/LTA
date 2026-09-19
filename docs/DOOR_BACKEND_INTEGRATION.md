@@ -1,6 +1,6 @@
 # Door inference integration
 
-Door is the currently integrated prediction model. The React app sends the original uploaded CSV to `backend/app.py`, which calls the preprocessing and frozen-model inference in `backend/door/predict.py`. The browser parses the same source for field inspection and charts. Neither path trains a model.
+Door is one of the integrated prediction models. The React app sends the original uploaded CSV to `backend/app.py`, which calls the preprocessing and frozen-model inference in `backend/door/predict.py`. The browser parses the same source for field inspection and charts. Neither path trains a model.
 
 ## Runtime files
 
@@ -25,7 +25,7 @@ backend/.venv/bin/python -B -m uvicorn app:app \
   --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
-The frontend defaults to `http://127.0.0.1:8000`; `VITE_DOOR_API_URL` can override it. Restart Vite after changing that environment variable. `-B` prevents Python bytecode cache files from appearing beside the prediction script.
+The frontend defaults to `http://127.0.0.1:8000`; `VITE_API_URL` (or the older `VITE_DOOR_API_URL`) can override it. Restart Vite after changing that environment variable. `-B` prevents Python bytecode cache files from appearing beside the prediction script.
 
 ## API and retained analyses
 
@@ -42,7 +42,7 @@ Uploads are limited to 25 MiB and must contain the 17 required controller fields
 
 Successful jobs remain in memory for up to one hour, with at most six jobs retained. Restart, expiry, and eviction require re-analysis. The service may use temporary upload files but does not intentionally retain raw datasets. Invalid input returns 422, oversized uploads 413, unavailable models 503, and expired jobs 404. Failures do not become Normal predictions.
 
-ACV, Rail, and SHM currently have no backend implementation here. Their app tabs inspect uploaded fields and traces while awaiting the teammates' models; SHM also provides stress playback. Each future integration must preserve the teammate's preprocessing and verify the real model's output before enabling analysis.
+Rail and SHM use the same API process with separate inference scripts and saved artifacts. Their results are per recording, with separate downloads and a lightweight cache; they do not use Door's cycles or evidence. ACV remains inspection-only while its model awaits integration. See [README.md](../README.md) for the other input and output formats.
 
 ## Predictions and evidence
 
