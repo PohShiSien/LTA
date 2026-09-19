@@ -54,6 +54,22 @@ def analyse(client, subsystem, raw=SHM, name='sample.csv'):
     return response.json()
 
 
+@pytest.mark.parametrize('origin,allowed', [
+    ('http://localhost:5174', True),
+    ('http://127.0.0.1:5175', True),
+    ('https://localhost:6443', True),
+    ('http://localhost.example.com:5174', False),
+    ('http://127.0.0.10:5174', False),
+])
+def test_local_development_ports_support_upload_preflight(client, origin, allowed):
+    response = client.options('/api/shm/predict', headers={
+        'Origin': origin, 'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'Content-Type',
+    })
+    assert response.status_code == (200 if allowed else 400)
+    assert response.headers.get('access-control-allow-origin') == (origin if allowed else None)
+
+
 def test_shm_inference_exports_and_preserves_supplied_files(client):
     paths = [ROOT / 'backend/shm/shm_model.joblib', ROOT / 'backend/shm/shm_predictions.csv']
     before = [path.read_bytes() for path in paths]

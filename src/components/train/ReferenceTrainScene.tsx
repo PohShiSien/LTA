@@ -5,7 +5,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import type { ComponentSelection, SourceRef, Subsystem } from '../../types/multisystem';
 import type { SubsystemVisualState } from '../../types/visualization';
-import { CAR_COUNT, CAR_LENGTH, RAIL_AXLE_BOXES, RAIL_SIDES, TRAIN_LENGTH, carCenterX, referenceCarIds, selectedCarOrdinal, type AxleBoxAnchor, type RailSide } from '../../lib/topology';
+import { CAR_COUNT, CAR_LENGTH, CAR_PITCH, RAIL_AXLE_BOXES, RAIL_SIDES, TRAIN_LENGTH, carCenterX, referenceCarIds, selectedCarOrdinal, type AxleBoxAnchor, type RailSide } from '../../lib/topology';
 import { REPRESENTATIVE_DOOR, SHM_RISK_BANDS, completedDoorAbnormal, doorOpeningFraction, shmRiskBand, unitProgress } from './subsystemVisuals';
 import './ReferenceTrainScene.css';
 
@@ -142,6 +142,64 @@ function IllustrativeDoor({ visualization, reducedMotion }: Pick<ReferenceTrainS
   </group>;
 }
 
+function AcvRankFace({ rank }: { rank: number }) {
+  const suspected = rank === 1;
+  return <div className={`reference-passenger-face ${suspected ? 'is-alert' : 'is-ok'}`} aria-hidden="true">
+    <svg viewBox="0 0 100 100" width="88" height="88">
+      <circle cx="50" cy="50" r="46" className="face" />
+      <circle cx="34" cy="42" r="6" className="eye" /><circle cx="66" cy="42" r="6" className="eye" />
+      {suspected ? <path d="M30 68 Q50 52 70 68" className="mouth" /> : <path d="M30 60 Q50 80 70 60" className="mouth" />}
+    </svg>
+  </div>;
+}
+
+function AcvCarriageInterior({ ordinal, carId, rank, reducedMotion }: { ordinal: number; carId: string; rank: number; reducedMotion: boolean }) {
+  const left = useRef<THREE.Group>(null);
+  const right = useRef<THREE.Group>(null);
+  const mountTime = useRef<number | null>(null);
+  useFrame(({ clock }) => {
+    if (mountTime.current === null) mountTime.current = clock.elapsedTime;
+    const elapsed = clock.elapsedTime - mountTime.current;
+    const openness = reducedMotion ? 1 : unitProgress(elapsed / 0.9);
+    const slide = openness * 0.7;
+    if (left.current) left.current.position.x = -0.34 - slide;
+    if (right.current) right.current.position.x = 0.34 + slide;
+  });
+  const suspected = rank === 1;
+  const tint = suspected ? '#ff8585' : '#75dfac';
+  return <group name={`AcvCarriageInterior_C${ordinal}`} position={[carCenterX(ordinal), 0, 1.34]} userData={{ illustrative: true, passengerData: false }}>
+    {/* Keep the rank illustration outside the door leaves so the shell does not obscure it. */}
+    <Html center position={[0, 2.75, .95]} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+      <div className="reference-acv-reveal"><AcvRankFace rank={rank}/><span>Car {carId} · Rank #{rank} of 8</span></div>
+    </Html>
+    <mesh position={[0, 1.85, -.3]} raycast={NO_RAYCAST}><boxGeometry args={[3.4, 2.35, .5]} /><meshStandardMaterial color="#122029" roughness={.9} side={THREE.DoubleSide} /></mesh>
+    <group ref={left} position={[-.34, 1.9, .15]}><mesh raycast={NO_RAYCAST}><boxGeometry args={[.64, 2.3, .09]} /><meshStandardMaterial color="#233241" metalness={.35} roughness={.5} emissive={tint} emissiveIntensity={.16} side={THREE.DoubleSide} /></mesh></group>
+    <group ref={right} position={[.34, 1.9, .15]}><mesh raycast={NO_RAYCAST}><boxGeometry args={[.64, 2.3, .09]} /><meshStandardMaterial color="#233241" metalness={.35} roughness={.5} emissive={tint} emissiveIntensity={.16} side={THREE.DoubleSide} /></mesh></group>
+  </group>;
+}
+
+// Illustrative mechanics only: neither verified geometry nor a component damage map.
+function StructuralInternals() {
+  const bogieOffset = CAR_LENGTH * .29;
+  return <group name="StructuralInternalsSchematic" userData={{ illustrative: true, schematic: true, engineeringAccuracy: false }}>
+    {Array.from({ length: CAR_COUNT }, (_, index) => index + 1).map(ordinal => {
+      const cx = carCenterX(ordinal);
+      return <group key={ordinal} name={`SchematicUndercarriage_C${ordinal}`}>
+        {[-bogieOffset, bogieOffset].map((bx, bi) => <group key={bi} position={[cx + bx, .58, 0]}>
+          <mesh raycast={NO_RAYCAST}><boxGeometry args={[1.55, .2, 1.95]} /><meshStandardMaterial color="#4C6070" emissive={CYAN} emissiveIntensity={.06} metalness={.6} roughness={.4} transparent opacity={.92} /></mesh>
+          <mesh position={[0, .16, 0]} raycast={NO_RAYCAST}><boxGeometry args={[.5, .22, .5]} /><meshStandardMaterial color="#5E7488" emissive={CYAN} emissiveIntensity={.08} metalness={.65} roughness={.35} transparent opacity={.92} /></mesh>
+          {[-.55, .55].map((ax, ai) => <group key={ai} position={[ax, -.16, 0]}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NO_RAYCAST}><cylinderGeometry args={[.065, .065, 1.95, 10]} /><meshStandardMaterial color="#B4C0C9" metalness={.8} roughness={.3} /></mesh>
+            {[-1, 1].map(side => <mesh key={side} position={[0, 0, side * .97]} rotation={[Math.PI / 2, 0, 0]} raycast={NO_RAYCAST}><cylinderGeometry args={[.42, .42, .16, 16]} /><meshStandardMaterial color="#39495A" emissive={CYAN} emissiveIntensity={.1} metalness={.5} roughness={.5} /></mesh>)}
+          </group>)}
+        </group>)}
+      </group>;
+    })}
+    {[-1.15, 1.15].map(z => <mesh key={z} position={[0, .74, z]} raycast={NO_RAYCAST}><boxGeometry args={[TRAIN_LENGTH + 2, .16, .13]} /><meshStandardMaterial color="#6F8598" emissive={CYAN} emissiveIntensity={.07} metalness={.55} roughness={.4} transparent opacity={.88} /></mesh>)}
+    {Array.from({ length: CAR_COUNT + 1 }, (_, index) => -TRAIN_LENGTH / 2 + index * CAR_PITCH).map(x => <mesh key={x} position={[x, .95, 0]} raycast={NO_RAYCAST}><boxGeometry args={[.12, .55, 2.3]} /><meshStandardMaterial color="#5E7488" emissive={CYAN} emissiveIntensity={.06} metalness={.5} roughness={.45} transparent opacity={.8} /></mesh>)}
+  </group>;
+}
+
 function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, xray, onReady, visualization, reducedMotion }: {
   ids: string[]; subsystem: Subsystem; selectedOrdinal: number | null; onSelect: ReferenceTrainSceneProps['onSelect']; xray: boolean; onReady: () => void;
   visualization?: SubsystemVisualState; reducedMotion: boolean;
@@ -176,9 +234,9 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, xray, on
         if (baseColor) material.color.copy(baseColor);
         if (tinted) material.color.set(shmBand.color);
         object.userData.shmRisk = tinted ? shmBand.id : undefined;
-        const ghost = (xray && shell) || subsystem === 'shm';
+        const ghost = xray && (shell || subsystem === 'shm');
         material.transparent = ghost;
-        material.opacity = tinted ? xray ? .55 : .9 : ghost ? subsystem === 'shm' ? shell ? .17 : .25 : .13 : 1;
+        material.opacity = tinted ? xray ? .35 : 1 : ghost ? subsystem === 'shm' ? shell ? .17 : .25 : .13 : 1;
         material.depthWrite = !ghost;
         material.needsUpdate = true;
         object.castShadow = !ghost;
@@ -215,9 +273,10 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, xray, on
       });
     }
   });
-  return <group name="EightCarReferenceConsist" userData={{ carCount: CAR_COUNT, schematic: true }}>
+  return <group name={subsystem === 'door' ? 'RepresentativeDoorCabin' : 'EightCarReferenceConsist'} userData={{ carCount: subsystem === 'door' ? 1 : CAR_COUNT, schematic: true }}>
     {model.cars.map((car, index) => {
       const ordinal = index + 1;
+      if (subsystem === 'door' && ordinal !== REPRESENTATIVE_DOOR.carOrdinal) return null;
       const selected = selectedOrdinal === ordinal;
       const rank = subsystem === 'acv' ? (visualization?.acv?.rankedCars.indexOf(ids[index]) ?? -1) + 1 : 0;
       const suspected = rank === 1 && visualization?.acv?.hasUsableData !== false;
@@ -237,7 +296,7 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, xray, on
         {selected && <Line points={[[carCenterX(ordinal)-4.6,.015,-1.6],[carCenterX(ordinal)+4.6,.015,-1.6],[carCenterX(ordinal)+4.6,.015,1.6],[carCenterX(ordinal)-4.6,.015,1.6],[carCenterX(ordinal)-4.6,.015,-1.6]]} color={CYAN} transparent opacity={.45} lineWidth={1} raycast={NO_RAYCAST} />}
       </group>;
     })}
-    {model.links.map(link => <primitive key={link.uuid} object={link} />)}
+    {subsystem !== 'door' && model.links.map(link => <primitive key={link.uuid} object={link} />)}
   </group>;
 }
 
@@ -248,14 +307,14 @@ function ReferenceRails({ subsystem, selection, onSelect, visualization }: Pick<
       const predicted = subsystem === 'rail' && visualization?.rail?.prediction === side;
       const color = predicted ? AMBER : selected ? CYAN : '#536875';
       return <group key={side}>
-      <mesh name={side === 'Side I' ? 'RailSide_I' : 'RailSide_II'} position={[0, .015, z]}
+      <mesh name={side === 'Side I' ? 'RailSide_I' : 'RailSide_II'} position={[subsystem === 'door' ? carCenterX(REPRESENTATIVE_DOOR.carOrdinal) : 0, subsystem === 'rail' ? .22 : .015, z]}
         userData={{ side, predicted }}
         onClick={(event: ThreeEvent<MouseEvent>) => { if (subsystem !== 'rail') return; event.stopPropagation(); onSelect({ kind: 'railSide', side }); }}
         onPointerOver={(event: ThreeEvent<PointerEvent>) => { if (subsystem !== 'rail') return; event.stopPropagation(); document.body.style.cursor = 'pointer'; }} onPointerOut={() => { document.body.style.cursor = ''; }}>
-        <boxGeometry args={[TRAIN_LENGTH + 9, .10, predicted || selected ? .13 : .08]} />
+        <boxGeometry args={subsystem === 'rail' ? [TRAIN_LENGTH + 9, .46, predicted || selected ? .42 : .34] : [subsystem === 'door' ? CAR_LENGTH + 3 : TRAIN_LENGTH + 9, .10, predicted || selected ? .13 : .08]} />
         <meshStandardMaterial color={color} emissive={predicted || selected ? color : '#000000'} emissiveIntensity={predicted ? .5 : selected ? .25 : 0} metalness={.7} roughness={.3} />
       </mesh>
-      {subsystem === 'rail' && <Html center position={[-TRAIN_LENGTH / 2 - 3.7, .25, z * 1.7]} zIndexRange={[12, 0]}><button className={`reference-rail-label${predicted ? ' is-predicted' : ''}`} onClick={() => onSelect({ kind: 'railSide', side })} aria-label={`Focus ${side} rail`} aria-pressed={selected}>{side.toUpperCase()}{predicted ? ' · MODEL RESULT' : ''}</button></Html>}
+      {subsystem === 'rail' && <Html center position={[-TRAIN_LENGTH / 2 - (side === 'Side I' ? 5.4 : 2.6), side === 'Side I' ? 1.95 : .55, z * 1.7]} zIndexRange={[12, 0]}><button className={`reference-rail-label${predicted ? ' is-predicted' : ''}`} onClick={() => onSelect({ kind: 'railSide', side })} aria-label={`Focus ${side} rail`} aria-pressed={selected}>{side.toUpperCase()}{predicted ? ' · MODEL RESULT' : ''}</button></Html>}
       </group>;
     })}
   </group>;
@@ -295,24 +354,47 @@ function ReferenceCamera({ subsystem, selection, ids, fitKey, reducedMotion, vis
 }) {
   const controls = useRef<OrbitControlsImpl>(null);
   const { camera, size } = useThree();
-  const focusOrdinal = subsystem === 'shm' ? null : selectedCarOrdinal(selection, ids);
+  // Only one door cabin is ever modelled, so the camera stays pinned there regardless of stray car selections.
+  const focusOrdinal = subsystem === 'shm' ? null : subsystem === 'door' ? REPRESENTATIVE_DOOR.carOrdinal : selectedCarOrdinal(selection, ids);
   const fit = useRef(fitKey);
   const initialised = useRef(false);
   const goal = useRef<CameraGoal>({ position: new THREE.Vector3(-25,22,80), target: new THREE.Vector3(0,1.5,0), focusOrdinal: null, active: false, snap: true });
   const setGoal = (ordinal: number | null) => {
     if (!(camera instanceof THREE.PerspectiveCamera)) return;
+    // Rail Corrugation's whole-train overview: fitting all eight cars edge-to-edge forces a distant, high
+    // camera regardless of angle, so the rails read as thin lines no matter how large the geometry is. A
+    // hand-placed low shot near one end, looking down the line, gives the (enlarged) rails real perspective
+    // presence in the foreground while the receding cars still supply train context.
+    if (subsystem === 'rail' && ordinal === null) {
+      // Kept just inside OrbitControls' maxPolarAngle so the tween settles here instead of being pulled back up.
+      const position = new THREE.Vector3(carCenterX(1) - 5, 3.6, selection.kind === 'railSide' && selection.side === 'Side I' ? -3.4 : 3.4);
+      const target = new THREE.Vector3(carCenterX(5), .4, 0);
+      goal.current = { position, target, focusOrdinal: null, active: true, snap: !initialised.current };
+      return;
+    }
+    // Doors have no reliable physical car/door identity, so there is no "whole train" view worth showing:
+    // even with nothing selected yet, stay tightly framed on the single representative cabin.
+    if (subsystem === 'door' && ordinal === null) {
+      const doorTarget = new THREE.Vector3(carCenterX(REPRESENTATIVE_DOOR.carOrdinal) + REPRESENTATIVE_DOOR.localX, 1.75, 1.2);
+      const position = doorTarget.clone().add(new THREE.Vector3(-3.4, 1.9, 6.2));
+      goal.current = { position, target: doorTarget, focusOrdinal: REPRESENTATIVE_DOOR.carOrdinal, active: true, snap: !initialised.current };
+      return;
+    }
     const side = (ordinal && selection.kind === 'axleBox' && selection.position % 2 === 1) || (selection.kind === 'railSide' && selection.side === 'Side I') ? -1 : 1;
-    const elevation = subsystem === 'acv' ? .54 : subsystem === 'rail' ? .30 : subsystem === 'door' ? .29 : .40;
+    // Rail Corrugation drops the camera toward rail height so the (enlarged) rails read as the primary subject.
+    const elevation = subsystem === 'acv' ? .54 : subsystem === 'rail' ? (ordinal ? .16 : .12) : subsystem === 'door' ? .29 : .40;
     const direction = new THREE.Vector3(ordinal ? -.48 : -.16, elevation, side).normalize();
     // A small longitudinal offset balances perspective without changing carriage proportions.
-    const target = new THREE.Vector3(ordinal ? carCenterX(ordinal) : -2.6, 1.6, 0);
+    const target = new THREE.Vector3(ordinal ? carCenterX(ordinal) : -2.6, subsystem === 'rail' ? (ordinal ? .5 : .45) : 1.6, 0);
     const halfLength = ordinal ? CAR_LENGTH / 2 + .9 : TRAIN_LENGTH / 2 + .95;
     const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), direction).normalize();
     const up = new THREE.Vector3().crossVectors(direction, right).normalize();
     const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     const tanX = tanY * size.width / Math.max(size.height,1);
+    // A smaller vertical extent (rails + lower carriage body, not the full roofline) lets the rail view sit noticeably closer.
+    const verticalExtent: [number, number] = subsystem === 'rail' ? [-.35, 1.5] : [-1.85, 3.5];
     let distance = 10;
-    for (const x of [-halfLength, halfLength]) for (const y of [-1.85, 3.5]) for (const z of [-2.3,2.3]) {
+    for (const x of [-halfLength, halfLength]) for (const y of verticalExtent) for (const z of [-2.3,2.3]) {
       const point = new THREE.Vector3(ordinal ? x : x - target.x,y,z);
       distance = Math.max(distance, point.dot(direction) + Math.abs(point.dot(right)) / (tanX * (ordinal ? .88 : .92)), point.dot(direction) + Math.abs(point.dot(up)) / (tanY * .76));
     }
@@ -379,13 +461,15 @@ function ReferenceFallback({ ids, selectedOrdinal, ...props }: ReferenceTrainSce
   const door = props.visualization?.door;
   const shmBand = props.subsystem === 'shm' ? shmRiskBand(props.visualization?.shm?.prediction) : undefined;
   const opening = doorOpeningFraction(door, props.reducedMotion);
-  return <div className="reference-fallback" role="group" aria-label="Eight-car reference schematic">
+  return <div className="reference-fallback" role="group" aria-label={props.subsystem === 'door' ? 'Representative door cabin schematic' : 'Eight-car reference schematic'}>
     <div className="reference-fallback__heading"><span>INTERACTIVE REFERENCE SCHEMATIC</span><small>3D unavailable · component selection remains available</small></div>
     <div className="reference-fallback__cars">{ids.map((id,index) => {
+      if (props.subsystem === 'door' && index + 1 !== REPRESENTATIVE_DOOR.carOrdinal) return null;
       const rank = props.subsystem === 'acv' ? (props.visualization?.acv?.rankedCars.indexOf(id) ?? -1) + 1 : 0;
       const suspected = rank === 1 && props.visualization?.acv?.hasUsableData !== false;
-      return <button type="button" key={id} aria-label={`Focus car ${id}`} aria-pressed={selectedOrdinal === index+1} data-acv-rank={rank || undefined} data-shm-risk={shmBand?.id} title={rank ? `ACV rank ${rank}${suspected ? ' · most suspected' : ''}` : undefined} disabled={props.subsystem === 'shm' || props.subsystem === 'door'} className={`reference-fallback__car${suspected ? ' is-ranked-first' : ''}${selectedOrdinal === index+1 ? ' is-selected' : ''}`} onClick={()=>props.onSelect({kind:'car',carId:id,ordinal:index+1})}><span>{props.subsystem === 'door' || props.subsystem === 'shm' ? 'REFERENCE' : `CAR ${id}`}</span><i /><small>{rank ? `Rank ${rank}` : props.subsystem === 'shm' ? 'Unlocated' : 'Reference'}</small></button>;
+      return <button type="button" key={id} aria-label={props.subsystem === 'door' ? 'Representative door cabin' : `Focus car ${id}`} aria-pressed={selectedOrdinal === index+1} data-acv-rank={rank || undefined} data-shm-risk={shmBand?.id} title={rank ? `ACV rank ${rank}${suspected ? ' · most suspected' : ''}` : undefined} disabled={props.subsystem === 'shm' || props.subsystem === 'door'} className={`reference-fallback__car${suspected ? ' is-ranked-first' : ''}${selectedOrdinal === index+1 ? ' is-selected' : ''}`} onClick={()=>props.onSelect({kind:'car',carId:id,ordinal:index+1})}><span>{props.subsystem === 'door' || props.subsystem === 'shm' ? 'REFERENCE' : `CAR ${id}`}</span><i /><small>{rank ? `Rank ${rank}` : props.subsystem === 'shm' ? 'Unlocated' : 'Reference'}</small></button>;
     })}</div>
+    {props.subsystem === 'acv' && selectedOrdinal && props.visualization?.acv?.hasUsableData !== false && props.visualization?.acv?.rankedCars.includes(ids[selectedOrdinal - 1]) && <div className="reference-fallback__interior" aria-label="Illustrative ACV carriage interior"><AcvRankFace rank={props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal - 1]) + 1}/><div className="reference-passenger-note"><strong>Ranked #{props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal - 1]) + 1} of 8</strong>Relative model ranking: red = rank 1, green = ranks 2–8</div></div>}
     {props.subsystem === 'door' && door && <div className={`reference-fallback__door${completedDoorAbnormal(door) ? ' is-abnormal' : ''}`} aria-label={`Illustrative ${door.operation} movement, cycle ${door.cycleNumber}`} style={{ '--door-opening': `${opening * 37}px` } as CSSProperties}>
       <div className="reference-fallback__door-frame"><i /><i /></div><span>Cycle {door.cycleNumber} · {door.operation}<small>{door.completed ? `Classified as ${door.prediction}` : 'Recorded movement in progress'}</small></span>
     </div>}
@@ -415,19 +499,21 @@ export function ReferenceTrainScene(props: ReferenceTrainSceneProps) {
   const shmPrediction = props.subsystem === 'shm' ? props.visualization?.shm?.prediction : undefined;
   const shmBand = shmRiskBand(shmPrediction);
   const sceneStatus = props.subsystem === 'door' && door ? door.completed ? `Cycle ${door.cycleNumber} · classified as ${door.prediction}` : `Cycle ${door.cycleNumber} · replaying recorded movement` : props.subsystem === 'rail' ? railPrediction ? `Recording model result · ${railPrediction}` : 'Rail model · Not analysed' : props.subsystem === 'acv' ? acvFirst ? acvSuspected ? `ACV model · Car ${acvFirst} ranked first` : 'ACV model · Insufficient thermal data' : 'ACV model · Not analysed' : props.subsystem === 'shm' ? shmBand ? `${shmBand.label} · recording-level result` : 'SHM model · Not analysed' : source ? 'Recorded source · select a component to inspect' : 'Select a recording to inspect';
-  return <div className="reference-train-scene" role="group" aria-label="Eight-car dataset reference layout" data-ready={!available||ready} data-renderer={available?'webgl':'schematic'} data-car-count={8} data-axle-box-count={props.subsystem==='rail'?64:0} data-layer={props.subsystem} data-selected-car={selectedOrdinal??''} data-acv-first-car={acvFirst ?? ''} data-rail-class={railPrediction ?? 'uncomputed'} data-shm-risk={props.subsystem === 'shm' ? shmBand?.id ?? 'uncomputed' : undefined} data-reduced-motion={props.reducedMotion} data-door-completed={door?.completed ?? false}
+  return <div className="reference-train-scene" role="group" aria-label={props.subsystem === 'door' ? 'Representative door cabin layout' : 'Eight-car dataset reference layout'} data-ready={!available||ready} data-renderer={available?'webgl':'schematic'} data-car-count={props.subsystem === 'door' ? 1 : 8} data-axle-box-count={props.subsystem==='rail'?64:0} data-layer={props.subsystem} data-xray={props.xray} data-selected-car={selectedOrdinal??''} data-acv-first-car={acvFirst ?? ''} data-rail-class={railPrediction ?? 'uncomputed'} data-shm-risk={props.subsystem === 'shm' ? shmBand?.id ?? 'uncomputed' : undefined} data-reduced-motion={props.reducedMotion} data-door-completed={door?.completed ?? false}
     style={{ '--stress-amplitude': props.reducedMotion ? 0 : unitProgress(props.visualization?.stress?.amplitude ?? 0), '--shm-risk-color': shmBand?.color } as CSSProperties}>
     <div className={`reference-scene-status${completedDoorAbnormal(door) || railAbnormal || acvSuspected ? ' is-amber' : props.subsystem === 'rail' || props.subsystem === 'acv' || (props.subsystem === 'shm' && !shmBand) ? ' is-neutral' : ''}`} role="status"><i /><span>{sceneStatus}</span></div>
     <div className="reference-train-stage">
-      {available ? <ReferenceBoundary fallback={fallback} onError={()=>setAvailable(false)}><Suspense fallback={<div className="reference-loading"><i/>Loading eight-car reference geometry</div>}>
+      {available ? <ReferenceBoundary fallback={fallback} onError={()=>setAvailable(false)}><Suspense fallback={<div className="reference-loading"><i/>{props.subsystem === 'door' ? 'Loading representative cabin geometry' : 'Loading eight-car reference geometry'}</div>}>
         <Canvas shadows dpr={[1,1.5]} camera={{position:[-25,22,80],fov:35,near:.1,far:500}} gl={{antialias:true,alpha:true,powerPreference:'high-performance'}}>
           <fog attach="fog" args={['#081016',180,350]}/>
           <ContextLoss onLost={()=>setAvailable(false)}/>
           <ReferenceEnvironment/>
-          <ReferenceDirection selectedOrdinal={selectedOrdinal}/>
+          <ReferenceDirection selectedOrdinal={props.subsystem === 'door' ? REPRESENTATIVE_DOOR.carOrdinal : selectedOrdinal}/>
           <ReferenceRails subsystem={props.subsystem} selection={props.selection} onSelect={props.onSelect} visualization={props.visualization}/>
           <ReferenceGeometry ids={ids} subsystem={props.subsystem} selectedOrdinal={selectedOrdinal} onSelect={props.onSelect} xray={props.xray} visualization={props.visualization} reducedMotion={props.reducedMotion} onReady={()=>setReady(true)}/>
           {props.subsystem==='rail'&&<AxleBoxLayer xray={props.xray} selectedOrdinal={selectedOrdinal} selection={props.selection} onSelect={props.onSelect} source={source} cursorLabel={props.cursorLabel} sensorReadout={props.sensorReadout}/>}
+          {props.subsystem==='acv'&&selectedOrdinal&&props.visualization?.acv?.hasUsableData !== false&&props.visualization?.acv?.rankedCars.includes(ids[selectedOrdinal-1])&&<AcvCarriageInterior key={selectedOrdinal} ordinal={selectedOrdinal} carId={ids[selectedOrdinal-1]} rank={props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal-1])+1} reducedMotion={props.reducedMotion}/>}
+          {props.subsystem==='shm'&&props.xray&&<StructuralInternals/>}
           {props.subsystem==='door'&&<IllustrativeDoor visualization={props.visualization} reducedMotion={props.reducedMotion} />}
           <ReferenceCamera subsystem={props.subsystem} selection={props.selection} ids={ids} fitKey={props.fitKey} reducedMotion={props.reducedMotion} visualization={props.visualization}/>
         </Canvas>
@@ -446,7 +532,7 @@ export function ReferenceTrainScene(props: ReferenceTrainSceneProps) {
       {shmBand && shmPrediction! > 1 && <p>Above the displayed 0–1 range; the original value is preserved in red.</p>}
       <button type="button" onClick={() => props.onSelect({ kind: 'recording' })} aria-label="Inspect unlocated stress recording">Inspect source fields <span aria-hidden="true">↗</span></button>
     </aside>}
-    <div className="reference-scene-caption"><span>{mappedContext ? props.subsystem==='acv' ? props.source && props.carIds.length === 8 ? 'Stable schematic car order · identity from case headers' : 'No case selected · schematic car placeholders' : 'Figure 2 reference · 8 cars / 64 axle boxes' : 'Reference layout — asset mapping not supplied'}</span><span>Reference travel −X · schematic dimensions</span></div>
+    <div className="reference-scene-caption"><span>{mappedContext ? props.subsystem==='acv' ? props.source && props.carIds.length === 8 ? 'Stable schematic car order · identity from case headers' : 'No case selected · schematic car placeholders' : 'Figure 2 reference · 8 cars / 64 axle boxes' : props.subsystem==='shm' ? props.xray ? 'X-ray internals are illustrative scaffolding, not verified engineering geometry' : 'X-ray reveals illustrative internal structure' : 'Representative cabin · physical door identity unavailable'}</span><span>Reference travel −X · schematic dimensions</span></div>
     {acvSuspected && <div className="reference-acv-key">Rank 1 = most suspected · ranking does not confirm a leak</div>}
     {props.subsystem==='rail'&&<div className="reference-rail-key" role="group" aria-label="Recording-level reference rails">
       {RAIL_SIDES.map(({side})=><button key={side} className={railPrediction === side ? 'is-predicted' : ''} onClick={()=>props.onSelect({kind:'railSide',side})} aria-label={`Select reference rail ${side}`} aria-pressed={props.selection.kind==='railSide'&&props.selection.side===side}><i/>{side}{railPrediction === side && <b>Model result</b>}<small>{side==='Side I'?'−Z / odd positions':'+Z / even positions'}</small></button>)}

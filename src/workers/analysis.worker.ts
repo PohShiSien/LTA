@@ -13,9 +13,11 @@ function forget(key: string) {
 async function execute(request: WorkerRequest) {
   if (request.type === 'load') {
     // The UI retains original File handles and can rehydrate an evicted source.
-    // Avoid retaining dozens of full-resolution rail files or several rich XLSX cases.
+    // Avoid retaining dozens of full-resolution rail files or several rich XLSX cases, but keep enough
+    // headroom that the common "one recording per subsystem, across all four tabs" workflow never evicts
+    // a recording the user hasn't looked away from yet (a single Rail file alone is ~1.29M cells).
     let cells = [...recordings.values()].reduce((sum, item) => sum + item.rows.length * item.fields.length, 0);
-    while (recordings.size && (recordings.size >= 3 || cells > 1_500_000)) {
+    while (recordings.size && (recordings.size >= 8 || cells > 4_500_000)) {
       const oldest = recordings.keys().next().value!;
       const item = recordings.get(oldest)!;
       cells -= item.rows.length * item.fields.length;

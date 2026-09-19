@@ -230,13 +230,6 @@ def predict_sensor_table(sensor_df, bundle):
         out[f"p_{c}"] = proba[:, i].round(4)
     return out.reset_index(drop=True)
 
-<<<<<<< HEAD
-=======
-# ---------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------
-
-warnings.filterwarnings("ignore")
->>>>>>> 6df3d687ebf5428120fc3f46365699f3bab030b5
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUBMISSION_COLUMNS = ["file_id", "prediction"]
 VALID_LABELS = {"Normal", "Side I", "Side II"}

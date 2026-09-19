@@ -1,0 +1,59 @@
+.landing-shell { min-height: 100vh; background: var(--bg-main); }
+.landing-topbar { display: flex; align-items: center; justify-content: space-between; padding: 22px 40px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-card); }
+.landing-textlink { display: inline-flex; align-items: center; gap: 8px; color: var(--status-healthy-strong); font-size: var(--text-control); font-weight: 600; }
+.landing-main { max-width: 920px; margin: 0 auto; padding: 56px 24px 80px; }
+.landing-hero { text-align: center; margin-bottom: 48px; }
+.landing-eyebrow { display: block; font: 700 13px var(--font-body); letter-spacing: 3px; color: var(--status-healthy); margin-bottom: 14px; }
+.landing-hero h1 { font-family: var(--font-heading); font-size: var(--text-display); font-weight: 800; letter-spacing: -.5px; color: var(--text-primary); }
+.landing-hero p { max-width: 640px; margin: 20px auto 0; font-size: var(--text-body-lg); line-height: var(--line-relaxed); color: var(--text-secondary); }
+
+.landing-offer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; background: var(--status-healthy-tint); border: 1px solid var(--status-healthy); border-radius: var(--radius-md); padding: 16px 20px; margin-bottom: 24px; }
+.landing-offer > span { display: flex; align-items: center; gap: 10px; font-size: var(--text-body-lg); color: var(--status-healthy-strong); font-weight: 600; }
+.landing-offer > div { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.landing-upload { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 56px 32px; border: 2px dashed var(--border-strong); border-radius: var(--radius-lg); background: var(--bg-card); box-shadow: var(--shadow-card); margin-bottom: 32px; }
+.landing-upload[data-dragging=true] { border-color: var(--status-healthy); background: var(--status-healthy-tint); }
+.landing-upload > svg { color: var(--status-healthy); }
+.landing-upload h2 { font-family: var(--font-heading); font-size: var(--text-section); font-weight: 700; }
+.landing-upload p { max-width: 560px; font-size: var(--text-body-lg); line-height: var(--line-relaxed); color: var(--text-secondary); }
+.landing-file-input { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+
+.landing-files { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 24px 26px; margin-bottom: 32px; box-shadow: var(--shadow-card); }
+.landing-files h3 { font-family: var(--font-heading); font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.landing-files h3 span { font: 700 12px var(--font-mono); color: var(--status-healthy-strong); background: var(--status-healthy-tint); padding: 3px 8px; border-radius: var(--radius-pill); margin-left: 8px; }
+.landing-files ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.landing-files li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-sunken); }
+.landing-files li.needs-confirmation { border-color: var(--status-warning); background: var(--status-warning-tint); }
+.landing-file-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.landing-file-name span { font-size: var(--text-body-lg); font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.landing-file-name small { font-size: var(--text-small); color: var(--text-muted); }
+.landing-file-assign { display: flex; align-items: center; gap: 10px; font-size: var(--text-meta); color: var(--text-secondary); font-weight: 600; }
+.landing-file-assign select { padding: 9px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-primary); font-size: var(--text-control); }
+.landing-file-note { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: var(--text-meta); color: var(--status-warning-strong); line-height: var(--line-normal); }
+.landing-file-note.is-ok { color: var(--status-healthy-strong); }
+.landing-file-remove { color: var(--text-muted); flex-shrink: 0; }
+.landing-file-remove:hover { color: var(--status-critical); }
+
+.landing-subsystems { text-align: center; margin-bottom: 32px; }
+.landing-subsystems h2 { font-family: var(--font-heading); font-size: var(--text-section); font-weight: 700; margin-bottom: 22px; }
+.landing-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.landing-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 30px 16px 24px; border: 2px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-card); }
+.landing-card svg { color: var(--status-healthy); }
+.landing-card strong { font-family: var(--font-heading); font-size: 17px; font-weight: 700; }
+.landing-card:hover { border-color: var(--status-healthy); }
+.landing-card.is-selected { border-color: var(--status-healthy); background: var(--status-healthy-tint); }
+.landing-card-check { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border-strong); display: grid; place-items: center; color: #fff; }
+.landing-card.is-selected .landing-card-check { background: var(--status-healthy); border-color: var(--status-healthy); }
+.landing-missing { margin-top: 18px; font-size: var(--text-meta); color: var(--status-warning-strong); font-weight: 600; }
+
+.landing-cta { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.landing-analyze { padding: 16px 30px; font-size: 17px; }
+
+@media (max-width: 780px) {
+  .landing-topbar { padding: 18px 20px; }
+  .landing-main { padding: 40px 16px 60px; }
+  .landing-upload { padding: 40px 20px; }
+  .landing-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-files li { grid-template-columns: 1fr; }
+  .landing-file-remove { justify-self: flex-end; }
+}

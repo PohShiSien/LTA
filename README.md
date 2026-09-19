@@ -1,8 +1,8 @@
-# RailWitness
+# JagaRail / RailWitness
 
 RailWitness displays uploaded rail recordings and runs externally trained models. Training happens in teammates' own projects; this repository contains the app, prediction scripts, and saved deployment models.
 
-**Current flow:** upload test CSVs or ACV XLSX files → run the selected subsystem's local Python model → view predictions in the webpage → download CSV/ZIP output.
+**Current flow:** upload test CSVs or ACV XLSX files → automatically run the selected subsystem's local Python model → view predictions and supporting evidence → download CSV/ZIP output.
 
 Door, ACV, Rail corrugation, and Structural health inference are integrated. There are no placeholder backend packages, synthetic demo results, or in-app training tools.
 
@@ -35,13 +35,13 @@ npm run dev
 
 Open **http://127.0.0.1:5173**. Keep both terminals running while analysing recordings. One backend serves all four models. Restart it after changing backend code or replacing a model. The API documentation is at **http://127.0.0.1:8000/docs**.
 
-On this workspace, `export PATH="$PWD/.tools/node/bin:$PATH"` makes the bundled Node available if needed. `Start RailWitness.command` starts the webpage. Set `VITE_API_URL` as shown in `.env.local.example` only if the backend address differs, then restart Vite. The previous `VITE_DOOR_API_URL` setting remains supported. `RAILWITNESS_CORS_ORIGINS` configures additional frontend origins.
+On this workspace, `export PATH="$PWD/.tools/node/bin:$PATH"` makes the bundled Node available if needed. `Start RailWitness.command` starts the webpage. Set `VITE_API_URL` as shown in `.env.local.example` only if the backend address differs, then restart Vite. The previous `VITE_DOOR_API_URL` setting remains supported. Localhost and 127.0.0.1 origins on any port are supported, including Vite's alternate ports. `RAILWITNESS_CORS_ORIGINS` configures additional frontend origins.
 
 ## Use the app
 
-1. Choose a subsystem and upload its test recording. Door, Rail, and SHM use CSV; ACV accepts XLSX or CSV case files.
-2. Select **Run analysis**. To process an ACV, Rail or SHM test set, select multiple case files when uploading and choose **Analyse all**.
-3. Inspect the recording's prediction and signals. Door also offers cycle evidence and representative Open/Close replay; SHM retains stress playback.
+1. On Home, upload files, confirm their subsystem assignments, and select **Analyse selected systems**. Door, Rail, and SHM use CSV; ACV accepts XLSX or CSV case files. The eight-step guided tour explains the real controls and returns to a clean Home on finish or skip.
+2. The queued files run through their supplied backend models automatically. Further workspace uploads also run automatically; **Run again** and **Analyse all** remain available for retries. Progress and errors stay scoped to their subsystem; completed progress cards clear after a short delay.
+3. Inspect the actual prediction, next-step recommendation, and **Why?** evidence dialog. The train focuses the available finding: an unlocated Door cycle, a predicted Rail side, or the highest-ranked ACV car. Door uses one representative cabin. ACV's interior face shows relative model rank (red for rank 1, green for ranks 2–8), not verified health. SHM retains stress playback and offers an explicitly illustrative X-ray structure.
 4. **CSV** downloads the selected recording's output. For ACV, Rail and SHM, **All results CSV** and **predictions.zip** export the whole loaded set once every recording has been analysed. Combined exports require distinct filenames; remove or rename duplicate sources first. Door ZIP exports its selected recording's cycles.
 
 | Model | Input | Output |

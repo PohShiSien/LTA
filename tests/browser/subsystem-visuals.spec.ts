@@ -15,9 +15,9 @@ const replayUpload = { name: 'replay-cycles.csv', mimeType: 'text/csv', buffer: 
   return values.join(',');
 })).flat()].join('\n')) };
 
-async function analyse(page: Page): Promise<DoorAnalysis> {
+async function uploadAndAnalyse(page: Page, files: Parameters<ReturnType<Page['locator']>['setInputFiles']>[0]): Promise<DoorAnalysis> {
   const pending = page.waitForResponse(response => response.url().endsWith('/api/door/predict') && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
+  await page.getByLabel('Upload recording files').setInputFiles(files);
   const response = await pending;
   expect(response.ok()).toBe(true);
   await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
@@ -28,11 +28,11 @@ test.beforeEach(async ({ page }) => { await page.emulateMedia({ reducedMotion: '
 
 test('uploaded Door timeline preserves every cycle, timestamps, keyboard selection, and inferred direction', async ({ page }) => {
   await page.goto('/#door');
-  await page.getByLabel('Upload recording files').setInputFiles(replayUpload);
-  const analysis = await analyse(page);
+  const analysis = await uploadAndAnalyse(page, replayUpload);
   const cycles = page.getByRole('group', { name: 'All detected Door cycles' });
   await expect(cycles.getByRole('button')).toHaveCount(analysis.segments.length);
   await expect(cycles.locator('.abnormal')).toHaveCount(analysis.summary.abnormal_resistance);
+  await cycles.getByRole('button').first().click();
   await expect(page.locator('.door-motion-visual svg')).toHaveAttribute('data-operation', 'Close');
   await cycles.getByRole('button').first().focus();
   await page.keyboard.press('ArrowRight');
@@ -48,8 +48,7 @@ test('uploaded Door timeline preserves every cycle, timestamps, keyboard selecti
 
 test('Door replay conceals completed-cycle output, pauses and resumes the same movement', async ({ page }) => {
   await page.goto('/#door');
-  await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'door-controller.csv'));
-  await analyse(page);
+  await uploadAndAnalyse(page, resolve(fixtures, 'door-controller.csv'));
   await page.clock.install({ time: new Date('2026-09-18T12:00:00Z') });
   await page.clock.pauseAt(new Date('2026-09-18T12:00:01Z'));
   await page.getByRole('button', { name: 'Play cycle replay' }).click();
@@ -59,6 +58,7 @@ test('Door replay conceals completed-cycle output, pauses and resumes the same m
   expect(beforePause).toBeGreaterThan(0); expect(beforePause).toBeLessThan(100);
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-door-completed', 'false');
   await expect(page.locator('.ms-segments')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Recommended next steps' })).toHaveCount(0);
   await expect(page.locator('.door-motion-result')).toHaveText('Recorded movement in progress');
   await page.getByRole('button', { name: 'Pause cycle replay' }).click();
   const paused = await progress.getAttribute('aria-valuenow');
@@ -76,9 +76,9 @@ test('Door replay conceals completed-cycle output, pauses and resumes the same m
 
 test('Door replay advances chronologically and cancels when the selected recording changes', async ({ page }) => {
   await page.goto('/#door');
-  await page.getByLabel('Upload recording files').setInputFiles([replayUpload, { name: 'other.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.join('\n')) }]);
+  await uploadAndAnalyse(page, [replayUpload, { name: 'other.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.join('\n')) }]);
   await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: replayUpload.name });
-  await analyse(page);
+  await page.getByRole('group', { name: 'All detected Door cycles' }).getByRole('button').first().click();
   await page.clock.install({ time: new Date('2026-09-18T12:00:00Z') });
   await page.clock.pauseAt(new Date('2026-09-18T12:00:01Z'));
   await page.getByRole('button', { name: 'Play cycle replay' }).click();
@@ -86,18 +86,20 @@ test('Door replay advances chronologically and cancels when the selected recordi
   await expect(page.locator('.door-replay-now')).toContainText('Cycle 2 of 3');
   await expect(page.locator('.door-motion-visual svg')).toHaveAttribute('data-operation', 'Open');
   await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: 'other.csv' });
-  await expect(page.locator('#door-replay')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeDisabled();
+  await expect(page.locator('.door-replay-now')).toContainText('Cycle 1 of 1');
+  await expect(page.getByRole('button', { name: 'Play cycle replay' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeEnabled();
   await page.clock.fastForward(5000);
   await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: replayUpload.name });
   await expect(page.getByRole('button', { name: 'Play cycle replay' })).toBeVisible();
   await expect(page.locator('.door-replay-now')).toContainText('Cycle 2 of 3');
 });
 
-test('SHM stress inspection stays unlocated, respects reduced motion, and waits for explicit analysis', async ({ page }) => {
+test('SHM stress inspection stays unlocated and respects reduced motion after automatic analysis', async ({ page }) => {
   await page.goto('/#shm');
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'test99.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
-  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
+  await expect(page.getByRole('region', { name: 'Prediction result' })).toContainText('Fatigue damage:');
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-selected-car', '');
   await expect(page.locator('.reference-train-scene')).toContainText('sensor location unavailable');
   await expect(page.locator('.multi-shell')).toHaveAttribute('data-reduced-motion', 'true');
@@ -129,5 +131,51 @@ test('SHM cursor reads the original sample even when chart downsampling omits it
   await expect(page.getByLabel('Selected stress value')).toHaveText('7');
   await expect(page.locator('.reference-train-scene')).toHaveCSS('--stress-amplitude', '0.07');
   await expect(page.getByRole('group', { name: 'Selected signal measurements' })).toContainText('Stress range');
-  await expect(page.getByRole('region', { name: 'Prediction result' })).toContainText('Recording ready for analysis');
+  await expect(page.getByRole('region', { name: 'Prediction result' })).toContainText('Fatigue damage:');
+});
+
+test('guided tour pins all eight real controls, supports Previous across pages, and finishes at clean Home', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Browse files', { exact: true }).setInputFiles({ name: 'staged-stress.csv', mimeType: 'text/csv', buffer: Buffer.from('1\n2\n3\n4') });
+  await expect(page.getByRole('region', { name: 'Uploaded files' })).toContainText('staged-stress.csv');
+  await page.locator('.landing-topbar').getByRole('button', { name: 'Take guided tour' }).click();
+  for (let step = 1; step <= 8; step++) {
+    await expect(page.locator('.tour-step-count')).toHaveText(`Step ${step} of 8`);
+    const selector = await page.locator('.tour-overlay').getAttribute('data-tour-target');
+    expect(selector).toBeTruthy();
+    await expect(page.locator(selector!)).toBeVisible();
+    await expect(page.locator('.tour-spotlight')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Uploaded files' })).toHaveCount(0);
+    if (step === 4) {
+      await page.getByRole('button', { name: 'Previous', exact: true }).click();
+      await expect(page.locator('.tour-step-count')).toHaveText('Step 3 of 8');
+      await expect(page.locator('.landing-analyze')).toBeVisible();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      await expect(page.locator('.tour-step-count')).toHaveText('Step 4 of 8');
+    }
+    await page.getByRole('button', { name: step === 8 ? 'Finish' : 'Next', exact: true }).click();
+  }
+  await expect(page.locator('.landing-shell')).toBeVisible();
+  await expect(page.locator('.multi-shell, .tour-overlay')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Uploaded files' })).toHaveCount(0);
+  await expect(page.locator('.landing-card[aria-pressed="true"]')).toHaveCount(0);
+  await expect(page.locator('.landing-analyze')).toBeDisabled();
+  expect(new URL(page.url()).hash).toBe('');
+});
+
+test('skipping the tour from a workspace clears uploads and returns to clean Home', async ({ page }) => {
+  await page.goto('/#shm');
+  await page.getByLabel('Upload recording files').setInputFiles({ name: 'real-stress.csv', mimeType: 'text/csv', buffer: Buffer.from('1\n2\n3\n4') });
+  await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: /guided tour/i }).click();
+  await expect(page.locator('.tour-step-count')).toHaveText('Step 1 of 8');
+  await page.getByRole('button', { name: 'Skip', exact: true }).click();
+  await expect(page.locator('.landing-shell')).toBeVisible();
+  await expect(page.locator('.multi-shell, .tour-overlay')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Uploaded files' })).toHaveCount(0);
+  await expect(page.locator('.landing-analyze')).toBeDisabled();
+  expect(new URL(page.url()).hash).toBe('');
+  await page.goto('/#shm');
+  await expect(page.getByRole('region', { name: 'Prediction result' })).toContainText('Choose a recording');
+  await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeDisabled();
 });

@@ -88,6 +88,7 @@ describe('rendered subsystem train schematic', () => {
     expect(cars.find(car => car.attributes.includes('aria-label="Focus car 03"'))!.attributes).toContain('aria-pressed="true"');
     expect(html).toContain('ACV model · Not analysed');
     expect(html).not.toMatch(/data-acv-rank|is-ranked|leak-likelihood|leaking car/);
+    expect(html).not.toContain('reference-passenger-face');
   });
 
   it.each([ids, [...ids].reverse()])('shows returned ACV ranks without rearranging source identities (%s)', (...rankedCars) => {
@@ -101,6 +102,9 @@ describe('rendered subsystem train schematic', () => {
     expect(html).toContain(`ACV model · Car ${rankedCars[0]} ranked first`);
     expect(html).toContain('ranking does not confirm a leak');
     expect(html).toContain('data-selected-car="3"');
+    expect(html).toContain(`reference-passenger-face ${rankedCars.indexOf('03') === 0 ? 'is-alert' : 'is-ok'}`);
+    expect(html).toContain(`Ranked #${rankedCars.indexOf('03') + 1} of 8`);
+    expect(html).toContain('Relative model ranking: red = rank 1, green = ranks 2–8');
     for (const car of cars) {
       const id = /aria-label="Focus car ([^"]+)"/.exec(car.attributes)![1];
       const rank = rankedCars.indexOf(id) + 1;
@@ -114,7 +118,7 @@ describe('rendered subsystem train schematic', () => {
   });
 
   it('retains the returned ACV order without suggesting a suspect when thermal data is unusable', () => {
-    const html = render('acv', { visualization: { acv: { rankedCars: ids, hasUsableData: false } } });
+    const html = render('acv', { selection: { kind: 'car', carId: '03', ordinal: 3 }, visualization: { acv: { rankedCars: ids, hasUsableData: false } } });
     const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
     expect(cars).toHaveLength(8);
     expect(html).toContain(`data-acv-first-car="${ids[0]}"`);
@@ -124,6 +128,7 @@ describe('rendered subsystem train schematic', () => {
       expect(car.attributes).toContain(`data-acv-rank="${ids.indexOf(id) + 1}"`);
     }
     expect(html).not.toMatch(/is-amber|is-ranked-first|most suspected|ranked first/);
+    expect(html).not.toContain('reference-passenger-face');
   });
 
   it('keeps SHM stress unlocated and disables the pulse under reduced motion', () => {
@@ -162,6 +167,34 @@ describe('rendered subsystem train schematic', () => {
     expect(html).toContain('data-shm-risk="uncomputed"');
     expect(html).not.toContain('aria-current="true"');
     expect(buttons(html).filter(button => button.attributes.includes('reference-fallback__car')).every(car => !car.attributes.includes('data-shm-risk'))).toBe(true);
+  });
+
+  it('keeps the SHM result unchanged when optional illustrative X-ray is enabled', () => {
+    const visualization = { shm: { prediction: .816841668231493 } };
+    const normal = render('shm', { visualization });
+    const xray = render('shm', { visualization, xray: true });
+    expect(normal).toContain('data-xray="false"');
+    expect(normal).toContain('X-ray reveals illustrative internal structure');
+    expect(xray).toContain('data-xray="true"');
+    expect(xray).toContain('X-ray internals are illustrative scaffolding, not verified engineering geometry');
+    for (const html of [normal, xray]) {
+      expect(html).toContain('data-shm-risk="red"');
+      expect(html).toContain('<output aria-label="SHM fatigue damage">0.816841668231493</output>');
+      expect(html).toContain('Recording-level colour; sensor location unavailable.');
+    }
+  });
+
+  it('renders just one representative Door cabin without a physical car assignment', () => {
+    const html = render('door', { selection: { kind: 'car', carId: '03', ordinal: 3 } });
+    expect(html).toContain('data-car-count="1"');
+    expect(html).toContain('aria-label="Representative door cabin layout"');
+    expect(html).toContain('Representative cabin · physical door identity unavailable');
+    expect(html).toContain('data-selected-car=""');
+    const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
+    expect(cars).toHaveLength(1);
+    expect(cars[0].attributes).toContain('disabled=""');
+    expect(cars[0].content).toContain('REFERENCE');
+    expect(cars[0].content).not.toContain('CAR 04');
   });
 
   it('shows an illustrative Door movement and reveals its classification only on completion', () => {

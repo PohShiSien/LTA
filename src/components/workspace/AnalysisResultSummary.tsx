@@ -1,7 +1,77 @@
-import { ArrowRight, ChevronDown, FileCheck2, ShieldCheck } from 'lucide-react';
+import { useEffect, useId, useRef } from 'react';
+import { ArrowRight, ChevronDown, FileCheck2, ShieldCheck, X } from 'lucide-react';
 import type { AnalysisResult, RecordingSummary } from '../../types/multisystem';
 import type { DoorAnalysis } from '../../lib/railwitnessDoorClient';
 import type { ModelAnalysis } from '../../lib/modelBackend';
+import { shmRiskBand } from '../train/subsystemVisuals';
+
+export function NextSteps({ doorAnalysis, modelAnalysis, onCycle, onCar, onRailSide, concealReplay = false }: {
+  doorAnalysis?: DoorAnalysis;
+  modelAnalysis?: ModelAnalysis;
+  onCycle: (index: number) => void;
+  onCar?: (carId: string) => void;
+  onRailSide?: (side: 'Side I' | 'Side II') => void;
+  concealReplay?: boolean;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const analysis = modelAnalysis ?? doorAnalysis;
+  useEffect(() => { dialog.current?.close(); }, [analysis?.job_id]);
+  if (!analysis || (doorAnalysis && concealReplay)) return null;
+  const abnormal = doorAnalysis?.segments.find(cycle => cycle.prediction === 'Abnormal resistance');
+  const band = modelAnalysis?.subsystem === 'shm' ? shmRiskBand(modelAnalysis.prediction) : undefined;
+  const status = modelAnalysis?.subsystem === 'rail' ? `Rail: ${modelAnalysis.prediction}`
+    : modelAnalysis?.subsystem === 'acv' ? `Inspect Car ${modelAnalysis.prediction[0]} first`
+    : modelAnalysis?.subsystem === 'shm' ? `${band?.label ?? 'Unclassified'} · SHM`
+    : abnormal ? `${doorAnalysis!.summary.abnormal_resistance} abnormal door cycles` : 'Door cycles classified Normal';
+  const action = modelAnalysis?.subsystem === 'rail' ? modelAnalysis.prediction === 'Normal'
+    ? 'Retain this recording’s result for comparison with later inspections.'
+    : `Review the ${modelAnalysis.prediction} recording and inspect that rail side; an individual axle box is not identified.`
+    : modelAnalysis?.subsystem === 'acv' ? 'Inspect the highest-ranked car first, then compare its recorded conditions with the other cars.'
+    : modelAnalysis?.subsystem === 'shm' ? 'Review the stress recording and compare its fatigue estimate with your engineering assessment criteria.'
+    : abnormal ? 'Review the flagged cycle’s current trace and supporting model evidence before arranging a physical inspection.'
+    : 'Keep the cycle results for reference; a Normal model label does not certify mechanical condition.';
+  const tone = abnormal || (modelAnalysis?.subsystem === 'rail' && modelAnalysis.prediction !== 'Normal') || band?.id === 'red' ? 'critical'
+    : modelAnalysis?.subsystem === 'acv' || band?.id === 'yellow' ? 'warning' : 'healthy';
+  const inspect = abnormal ? () => onCycle(abnormal.cycle_index)
+    : modelAnalysis?.subsystem === 'acv' && onCar ? () => onCar(modelAnalysis.prediction[0])
+    : modelAnalysis?.subsystem === 'rail' && modelAnalysis.prediction !== 'Normal' && onRailSide ? () => onRailSide(modelAnalysis.prediction as 'Side I' | 'Side II') : undefined;
+  return <>
+    <section className="ms-next-steps" aria-label="Recommended next steps">
+      <table><thead><tr><th>Status</th><th>Recommended action</th><th>Evidence</th></tr></thead>
+        <tbody><tr className={tone}><td><span className={`ms-status-dot ${tone}`} aria-hidden="true"/>{status}</td><td>{action}</td><td><button className="ms-text-button" onClick={() => dialog.current?.showModal()}>Why?</button></td></tr></tbody>
+      </table>
+    </section>
+    <dialog className="ms-dialog ms-why-dialog" ref={dialog} aria-labelledby={titleId} onClick={event => { if (event.target === event.currentTarget) dialog.current?.close(); }}>
+      <div><header><h2 id={titleId}>Supporting evidence</h2><button aria-label="Close evidence" onClick={() => dialog.current?.close()}><X size={17}/></button></header>
+        <div className="ms-why-body"><p><strong>{status}</strong></p><p><strong>Analysed file:</strong> {analysis.source_name}</p>
+          {doorAnalysis && <>
+            <p>{doorAnalysis.summary.normal} Normal and {doorAnalysis.summary.abnormal_resistance} Abnormal resistance cycles, covering {doorAnalysis.summary.rows.toLocaleString()} source rows.</p>
+            <table className="ms-why-table"><thead><tr><th>Cycle</th><th>Recorded interval</th><th>Prediction</th><th>Peak current</th></tr></thead><tbody>{doorAnalysis.segments.filter(cycle => !abnormal || cycle.prediction === 'Abnormal resistance').slice(0, 10).map(cycle => <tr key={cycle.cycle_id}><td>{cycle.cycle_index + 1}</td><td>{cycle.start_time} – {cycle.end_time}</td><td>{cycle.prediction}</td><td>{String(cycle.peak_current_A)} A</td></tr>)}</tbody></table>
+            <p>Up to ten matching cycles shown. Peak current is recorded evidence, not a separate fault threshold. The model classifies completed cycles; physical door identity is unavailable.</p>
+          </>}
+          {modelAnalysis?.subsystem === 'rail' && <>
+            <p><strong>Returned classification:</strong> {modelAnalysis.prediction}. Derived recording speed: {String(modelAnalysis.evidence.speed_kmh)} km/h.</p>
+            <table className="ms-why-table"><thead><tr><th>Class</th><th>Unweighted model score</th></tr></thead><tbody>{Object.entries(modelAnalysis.evidence.probabilities).map(([label, score]) => <tr key={label}><td>{label}</td><td>{String(score)}</td></tr>)}</tbody></table>
+            <p>The script applies saved class weights before selecting the final label. These scores describe the recording and do not locate a defective axle box.</p>
+          </>}
+          {modelAnalysis?.subsystem === 'acv' && <>
+            <table className="ms-why-table"><thead><tr><th>Rank / car</th><th>Relative score</th><th>Thermal deficit</th><th>Usable minutes</th></tr></thead><tbody>{modelAnalysis.evidence.cars.map(car => <tr key={car.car_id}><td>{car.rank} · Car {car.car_id}</td><td>{String(car.probability)}</td><td>{car.thermal_deficit_degC === null ? 'Unavailable' : `${String(car.thermal_deficit_degC)} °C`}</td><td>{String(car.valid_minutes)}{!car.has_data && ' · insufficient data'}</td></tr>)}</tbody></table>
+            <p>The supplied model assumes one leaking car per case. Its ranking and relative scores are inspection priorities, not confirmed faults or calibrated failure probabilities.</p>
+          </>}
+          {modelAnalysis?.subsystem === 'shm' && <>
+            <p><strong>Fatigue damage:</strong> {String(modelAnalysis.prediction)}</p>
+            <p><strong>Counted stress cycles:</strong> {modelAnalysis.evidence.cycles.toLocaleString()}<br/><strong>Fifth range moment:</strong> {String(modelAnalysis.evidence.range_moment_5)}</p>
+            <p>The train colour uses provisional display thresholds of 0.33 and 0.67, not model-validated engineering limits. The result applies to this recording; it is not a health percentage or a located structural defect.</p>
+          </>}
+          {analysis.warnings.length > 0 && <ul className="ms-why-notes">{analysis.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
+          <p><strong>Model:</strong> {analysis.model_name} · {analysis.model_id}</p>
+        </div>
+        <div className="ms-why-actions">{inspect && <button className="ms-button primary" onClick={() => { inspect(); dialog.current?.close(); }}>Inspect finding<ArrowRight size={13}/></button>}<button className="ms-button" onClick={() => dialog.current?.close()}>Close</button></div>
+      </div>
+    </dialog>
+  </>;
+}
 
 export default function ResultSummary({ result, recording, onCycle, onCar, doorAnalysis, modelAnalysis, selectedCycle, concealReplay = false }: { result: AnalysisResult | null; recording?: RecordingSummary; onCycle: (index: number) => void; onCar?: (carId: string) => void; doorAnalysis?: DoorAnalysis; modelAnalysis?: ModelAnalysis; selectedCycle?: number | null; concealReplay?: boolean }) {
   if (modelAnalysis) return <section className="ms-result is-computed" aria-label="Prediction result">

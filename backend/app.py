@@ -36,6 +36,7 @@ JOB_TTL_SECONDS=3600
 app=FastAPI(title='RailWitness Model API',version='1.0.0',description='Offline recording analysis. Read-only and advisory.')
 origins=os.environ.get('RAILWITNESS_CORS_ORIGINS','http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000').split(',')
 app.add_middleware(CORSMiddleware,allow_origins=[x.strip() for x in origins if x.strip()],
+                   allow_origin_regex=r'^https?://(localhost|127\.0\.0\.1)(:\d+)?$',
                    allow_credentials=False,allow_methods=['GET','POST'],allow_headers=['Content-Type'])
 
 @dataclass

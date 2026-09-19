@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
-import { Activity, ArrowDownToLine, ArrowRight, Box, Check, ChevronDown, ChevronRight, CircleHelp, Database, FileUp, Fingerprint, Focus, Layers3, LoaderCircle, Pin, Search, ShieldCheck, Snowflake, TrainFront, Upload, Waves, X } from 'lucide-react';
+import { Activity, ArrowDownToLine, ArrowRight, Box, Check, ChevronDown, ChevronRight, CircleHelp, Database, FileUp, Fingerprint, Focus, Info, Layers3, LoaderCircle, Pin, Search, ShieldCheck, Snowflake, TrainFront, Upload, Waves, X } from 'lucide-react';
 import type { AnalysisResult, CellValue, ComponentSelection, DisplayField, RecordingSummary, Subsystem } from '../types/multisystem';
 import { initialSelection, sourceKey, workerRequest, type InspectionData, type WorkerRequest } from '../lib/workerClient';
 import { fieldValue, sampleTimeLabel } from '../lib/recordings';
@@ -13,12 +13,13 @@ import { useDoorCycleDetail } from '../lib/useDoorCycleDetail';
 import DoorCycleEvidence from '../components/door/DoorCycleEvidence';
 import DoorReplayTimeline from '../components/door/DoorReplayTimeline';
 import DoorMotionVisual from '../components/door/DoorMotionVisual';
-import ResultSummary from '../components/workspace/AnalysisResultSummary';
+import ResultSummary, { NextSteps } from '../components/workspace/AnalysisResultSummary';
 import StressReplay from '../components/shm/StressReplay';
 import { useDoorReplay } from '../lib/useDoorReplay';
 import type { DoorReplayCycle } from '../lib/doorReplay';
 import type { SubsystemVisualState } from '../types/visualization';
 import { useStressPlayback } from '../lib/useWorkspaceMotion';
+import { LogoMark } from '../components/brand/Logo';
 import './SubsystemWorkspace.css';
 
 const apiUrl = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_DOOR_API_URL ?? 'http://127.0.0.1:8000';
@@ -57,18 +58,35 @@ function fieldMatches(field: DisplayField, selection: ComponentSelection, subsys
   return true;
 }
 
-export default function SubsystemWorkspace() {
-  const [subsystem, setSubsystem] = useState<Subsystem>(initialLayer);
+export interface ImportJob { subsystem: Subsystem; files: File[] }
+export interface SubsystemWorkspaceProps {
+  visibleSubsystems?: Subsystem[];
+  importJobs?: ImportJob[];
+  onBackToUpload?: () => void;
+  onOpenTour?: () => void;
+}
+type ImportStage = 'queued' | 'uploading' | 'analysing' | 'done' | 'error';
+interface ImportProgress { stage: ImportStage; message?: string; failedAt?: 'uploading' | 'analysing' }
+const ALL_SUBSYSTEMS = Object.keys(SUBSYSTEMS) as Subsystem[];
+
+export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBackToUpload, onOpenTour }: SubsystemWorkspaceProps = {}) {
+  const [subsystem, setSubsystem] = useState<Subsystem>(() => visibleSubsystems?.[0] ?? initialLayer());
   const [sessions, setSessions] = useState(createSessions);
+  const [revealed, setRevealed] = useState<Subsystem[]>(() => visibleSubsystems?.length ? visibleSubsystems : ALL_SUBSYSTEMS);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [progress, setProgress] = useState<Partial<Record<Subsystem, ImportProgress>>>(() => Object.fromEntries((importJobs ?? []).map(job => [job.subsystem, { stage: 'queued' }])));
+  const [showCabinHint, setShowCabinHint] = useState(true);
   const [busy, setBusy] = useState<Record<string, string>>({});
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Partial<Record<Subsystem, string>>>({});
+  const error = errors[subsystem] ?? '';
+  const setError = (message: string, target = subsystem) => setErrors(previous => ({ ...previous, [target]: message }));
   const [doorJobs, setDoorJobs] = useState<Record<string, DoorAnalysis>>({});
   const [modelJobs, setModelJobs] = useState<Record<string, ModelAnalysis>>({});
   const [doorCycles, setDoorCycles] = useState<Record<string, number>>({});
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [xray, setXray] = useState(true);
+  const [xray, setXray] = useState(subsystem === 'rail');
   const [fitKey, setFitKey] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [showHelp, setShowHelp] = useState(false);
@@ -82,6 +100,12 @@ export default function SubsystemWorkspace() {
   const helpRef = useRef<HTMLDialogElement>(null);
   const sourceFiles = useRef(new Map<string, File>());
   const operations = useRef(new Set<Subsystem>());
+  const importStarted = useRef(false);
+  const pendingImports = useRef(new Set(importJobs?.map(job => job.subsystem)));
+  const mounted = useRef(true);
+  const progressTimers = useRef<Partial<Record<Subsystem, ReturnType<typeof setTimeout>>>>({});
+  const failedFiles = useRef<Partial<Record<Subsystem, File[]>>>({});
+  const focusedResults = useRef(new Set<string>());
   const skey = subsystem, session = sessions[subsystem];
   const recording = session.recordings.find(item => sourceKey(item) === session.selectedId);
   const recordingKey = recording ? sourceKey(recording) : '';
@@ -111,7 +135,7 @@ export default function SubsystemWorkspace() {
   // Overview mode can expose hundreds of fields; keep the selected trace inspectable and pinnable.
   if (metric && displayedFields.includes(metric) && !visibleFields.includes(metric)) visibleFields.unshift(metric);
   const exportableDoorJob = sessions.door.selectedId ? doorJobs[sessions.door.selectedId] : undefined;
-  const activeBusy = busy[skey] || busy[recordingKey];
+  const activeBusy = busy[skey] || busy[recordingKey] || (progress[subsystem]?.stage === 'queued' ? 'Queued for analysis…' : '');
   const patchSession = (key: Subsystem, update: Partial<Session> | ((previous: Session) => Session)) => setSessions(previous => ({ ...previous, [key]: typeof update === 'function' ? update(previous[key]) : { ...previous[key], ...update } }));
   const withRecording = async <T,>(request: Extract<WorkerRequest, { key: string }>, item: RecordingSummary): Promise<T> => {
     try { return await workerRequest<T>(request); }
@@ -131,7 +155,7 @@ export default function SubsystemWorkspace() {
     preference.addEventListener('change', change);
     return () => preference.removeEventListener('change', change);
   }, []);
-  useEffect(() => { setQuery(''); setShowAll(false); setFieldLimit(30); setSpectral(false); setError(''); setXray(subsystem === 'rail'); }, [subsystem, recordingKey]);
+  useEffect(() => { setQuery(''); setShowAll(false); setFieldLimit(30); setSpectral(false); setXray(subsystem === 'rail'); }, [subsystem, recordingKey]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 4200); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => {
     if (!recordingKey) { setInspection(null); return; }
@@ -141,55 +165,108 @@ export default function SubsystemWorkspace() {
   }, [recordingKey, session.cursor, signalKeys]);
   useEffect(() => { if (showHelp) helpRef.current?.showModal(); else helpRef.current?.close(); }, [showHelp]);
 
-  const addFiles = async (files: FileList | File[]) => {
-    const targetSubsystem = subsystem, targetKey = subsystem;
-    if (operations.current.has(targetKey)) { setError('This source session is processing. Wait for it to finish before uploading another recording.'); return; }
-    operations.current.add(targetKey);
-    setError('');
-    const failures: string[] = [];
-    for (const file of Array.from(files)) {
-      setBusy(previous => ({ ...previous, [targetKey]: `Reading ${file.name}…` }));
-      try {
-        const loaded = await workerRequest<RecordingSummary>({ type: 'load', subsystem: targetSubsystem, fileName: file.name, contents: await file.arrayBuffer(), datasetId: `ps3-${targetSubsystem}` });
-        sourceFiles.current.set(sourceKey(loaded), file);
-        patchSession(targetKey, previous => ({ ...previous, recordings: [...previous.recordings.filter(item => sourceKey(item) !== sourceKey(loaded)), loaded], selectedId: sourceKey(loaded), cursor: 0, selection: initialSelection(targetSubsystem, loaded), metric: '', pins: [] }));
-      } catch (reason) { failures.push(`${file.name}: ${reason instanceof Error ? reason.message : 'Could not read recording.'}`); }
-    }
-    setBusy(previous => { const next = { ...previous }; delete next[targetKey]; return next; });
-    if (failures.length) setError(failures.join('\n')); else setNotice(`${files.length} recording${files.length === 1 ? '' : 's'} loaded. Source fields are ready to inspect.`);
-    if (uploadInput.current) uploadInput.current.value = '';
-    operations.current.delete(targetKey);
+  const clearBusy = (target: string) => setBusy(previous => { const next = { ...previous }; delete next[target]; return next; });
+  const finishOperation = (target: Subsystem, failures: string[], failedAt: 'uploading' | 'analysing' = 'analysing') => {
+    operations.current.delete(target);
+    clearBusy(target);
+    setError(failures.join('\n'), target);
+    const finished: ImportProgress = failures.length ? { stage: 'error', message: failures.join('\n'), failedAt } : { stage: 'done' };
+    setProgress(previous => ({ ...previous, [target]: finished }));
+    clearTimeout(progressTimers.current[target]);
+    if (!failures.length) progressTimers.current[target] = setTimeout(() => setProgress(previous => {
+      if (previous[target] !== finished) return previous;
+      const next = { ...previous }; delete next[target]; return next;
+    }), 2500);
   };
-  const runAnalysis = async (all = false) => {
-    const targetKey = skey;
-    if (operations.current.has(targetKey)) return;
-    operations.current.add(targetKey);
-    const targets = all ? session.recordings : recording ? [recording] : [];
-    setError('');
+  // Both upload entry points pass the just-parsed recordings directly to the real backend.
+  // Reading session.recordings here would use the render before the upload completed.
+  const analyseRecordings = async (targets: RecordingSummary[], target: Subsystem): Promise<string[]> => {
+    const failures: string[] = [];
+    setProgress(previous => ({ ...previous, [target]: { stage: 'analysing' } }));
     for (const item of targets) {
-      const key = sourceKey(item); setBusy(previous => ({ ...previous, [key]: `Analysing ${item.source.fileName}…`, [targetKey]: `Analysing ${item.source.fileName}…` }));
-      // A failed backend re-analysis must not leave a previous result presented as this run.
+      const key = sourceKey(item);
+      setBusy(previous => ({ ...previous, [key]: `Analysing ${item.source.fileName}…`, [target]: `Analysing ${item.source.fileName}…` }));
       setDoorJobs(previous => { const next = { ...previous }; delete next[key]; return next; });
       setModelJobs(previous => { const next = { ...previous }; delete next[key]; return next; });
-      patchSession(targetKey, previous => { const results = { ...previous.results }; delete results[key]; return { ...previous, results }; });
+      patchSession(target, previous => { const results = { ...previous.results }; delete results[key]; return { ...previous, results }; });
       try {
         const file = sourceFiles.current.get(key);
         if (!file) throw new Error('The original recording is unavailable. Upload it again before analysis.');
-        if (targetKey === 'door') {
+        if (target === 'door') {
           const analysis = await doorClient.analyse(file);
           const output = doorAnalysisResult(analysis, item);
+          const firstAbnormal = output.segments.findIndex(segment => segment.prediction === 'Abnormal resistance');
           setDoorJobs(previous => ({ ...previous, [key]: analysis }));
-          setDoorCycles(previous => ({ ...previous, [key]: 0 }));
-          patchSession(targetKey, previous => ({ ...previous, results: { ...previous.results, [key]: output } }));
+          setDoorCycles(previous => ({ ...previous, [key]: Math.max(0, firstAbnormal) }));
+          patchSession(target, previous => ({ ...previous, results: { ...previous.results, [key]: output } }));
         } else {
-          const analysis = await modelClient.analyse(targetKey, file, item.rowCount, item.carIds);
+          const analysis = await modelClient.analyse(target, file, item.rowCount, item.carIds);
           setModelJobs(previous => ({ ...previous, [key]: analysis }));
         }
-      }
-      catch (reason) { setError(reason instanceof Error ? reason.message : 'Analysis failed. No prediction was generated.'); }
-      finally { setBusy(previous => { const next = { ...previous }; delete next[key]; delete next[targetKey]; return next; }); }
+      } catch (reason) {
+        failures.push(`${item.source.fileName}: ${reason instanceof Error ? reason.message : 'Analysis failed. No prediction was generated.'}`);
+      } finally { clearBusy(key); }
     }
-    operations.current.delete(targetKey);
+    return failures;
+  };
+  const addFiles = async (files: FileList | File[], target = subsystem) => {
+    if (pendingImports.current.has(target)) { setError('This subsystem is queued for analysis. Wait for its staged recordings to finish before uploading more files.', target); return; }
+    if (operations.current.has(target)) { setError('This source session is processing. Wait for it to finish before uploading another recording.', target); return; }
+    operations.current.add(target);
+    setError('', target);
+    setProgress(previous => ({ ...previous, [target]: { stage: 'uploading' } }));
+    const failures: string[] = [], loadedItems: RecordingSummary[] = [];
+    let failedAt: 'uploading' | 'analysing' = 'analysing';
+    failedFiles.current[target] = Array.from(files);
+    try {
+      for (const file of Array.from(files)) {
+        setBusy(previous => ({ ...previous, [target]: `Reading ${file.name}…` }));
+        try {
+          const loaded = await workerRequest<RecordingSummary>({ type: 'load', subsystem: target, fileName: file.name, contents: await file.arrayBuffer(), datasetId: `ps3-${target}` });
+          sourceFiles.current.set(sourceKey(loaded), file);
+          loadedItems.push(loaded);
+          patchSession(target, previous => ({ ...previous, recordings: [...previous.recordings.filter(item => sourceKey(item) !== sourceKey(loaded)), loaded], selectedId: sourceKey(loaded), cursor: 0, selection: initialSelection(target, loaded), metric: '', pins: [] }));
+        } catch (reason) { failures.push(`${file.name}: ${reason instanceof Error ? reason.message : 'Could not read recording.'}`); }
+      }
+      if (failures.length) failedAt = 'uploading';
+      if (loadedItems.length) failures.push(...await analyseRecordings(loadedItems, target));
+    } finally {
+      finishOperation(target, failures, failedAt);
+      if (uploadInput.current) uploadInput.current.value = '';
+    }
+  };
+  const runAnalysis = async (all = false) => {
+    const target = subsystem;
+    if (operations.current.has(target) || pendingImports.current.has(target)) return;
+    const targets = all ? session.recordings : recording ? [recording] : [];
+    if (!targets.length) return;
+    operations.current.add(target);
+    setError('', target);
+    delete failedFiles.current[target];
+    const failures = await analyseRecordings(targets, target);
+    finishOperation(target, failures);
+  };
+  useEffect(() => {
+    mounted.current = true;
+    if (!importStarted.current && importJobs?.length) {
+      importStarted.current = true;
+      // Each job carries its own subsystem and files; changing tabs never cancels or redirects it.
+      void (async () => {
+        for (const job of importJobs) {
+          if (!mounted.current) break;
+          pendingImports.current.delete(job.subsystem);
+          await addFiles(job.files, job.subsystem);
+        }
+      })();
+    }
+    return () => {
+      mounted.current = false;
+      Object.values(progressTimers.current).forEach(clearTimeout);
+    };
+  }, []);
+  const addSubsystem = (target: Subsystem) => {
+    setRevealed(previous => previous.includes(target) ? previous : [...previous, target]);
+    setShowAddMenu(false); location.hash = target; setSubsystem(target);
   };
   const selectRecording = (key: string) => { const item = session.recordings.find(candidate => sourceKey(candidate) === key); patchSession(skey, { selectedId: key, cursor: 0, selection: initialSelection(subsystem, item), metric: '', pins: [] }); };
   const removeRecording = () => {
@@ -281,6 +358,20 @@ export default function SubsystemWorkspace() {
   useEffect(() => { if (reducedMotion) stress.pause(); }, [reducedMotion]);
   const stableSignal = inspection?.key === recordingKey ? inspection.data.signals.find(signal => signal.fieldKey === metric?.fieldKey) ?? null : null;
   const stressValue = subsystem === 'shm' && metric && inspected ? numericValue(fieldValue(recording!, metric, row).value) : null;
+  useEffect(() => {
+    const jobId = doorJob?.job_id ?? modelJob?.job_id;
+    if (!jobId || focusedResults.current.has(jobId)) return;
+    focusedResults.current.add(jobId);
+    if (modelJob?.subsystem === 'acv') {
+      const carId = modelJob.prediction[0];
+      selectComponent({ kind: 'car', carId, ordinal: carIds.indexOf(carId) + 1 });
+    } else if (modelJob?.subsystem === 'rail' && modelJob.prediction !== 'Normal') {
+      selectComponent({ kind: 'railSide', side: modelJob.prediction });
+    } else if (doorJob && selectedDoorCycle !== null) {
+      updateDoorCycle(selectedDoorCycle);
+    }
+    document.getElementById('subsystem-train')?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  }, [recordingKey, doorJob?.job_id, modelJob?.job_id]);
   const visualization: SubsystemVisualState = {
     door: selectedReplayCycle ? { cycleNumber: selectedReplayCycle.index + 1, operation: selectedReplayCycle.operation, progress: replay.progress, completed: replay.completed, prediction: selectedReplayCycle.prediction } : undefined,
     acv: modelJob?.subsystem === 'acv' ? { rankedCars: modelJob.prediction, hasUsableData: modelJob.evidence.cars.some(car => car.has_data) } : undefined,
@@ -291,23 +382,48 @@ export default function SubsystemWorkspace() {
 
   return <div className="multi-shell" data-reduced-motion={reducedMotion} data-subsystem={subsystem}>
     <a className="ms-skip" href="#workspace-content" onClick={event => { event.preventDefault(); document.getElementById('workspace-content')?.focus(); }}>Skip to workspace</a>
-    <aside className="ms-sidebar"><a className="ms-brand" href="#door" onClick={() => setSubsystem('door')}><span>R</span>RailWitness</a><p className="ms-brand-caption">EVIDENCE IN CONTEXT</p><span className="ms-nav-caption">SUBSYSTEM WORKSPACE</span><nav aria-label="Subsystems">{(Object.entries(SUBSYSTEMS) as [Subsystem, typeof SUBSYSTEMS[Subsystem]][]).map(([id, item]) => <button key={id} className={id === subsystem ? 'active' : ''} aria-current={id === subsystem ? 'page' : undefined} onClick={() => { location.hash = id; setSubsystem(id); }}><item.icon size={17}/><span>{item.short}</span>{id === subsystem && <i/>}</button>)}</nav><div className="ms-sidebar-bottom"><div className="ms-independence"><Layers3 size={17}/><p>Four independent datasets.<br/>One reference workspace.</p></div><button className="ms-help" onClick={() => setShowHelp(true)}><CircleHelp size={16}/>How it works</button><p className="ms-sidebar-version">RAILWITNESS <span>v3.0</span></p></div></aside>
+    <aside className="ms-sidebar"><a className="ms-brand" href="#" onClick={event => { event.preventDefault(); if (onBackToUpload) onBackToUpload(); else location.hash = ''; }}><LogoMark size={30}/>JagaRail</a><p className="ms-brand-caption">EVIDENCE IN CONTEXT</p><span className="ms-nav-caption">SUBSYSTEM WORKSPACE</span><nav aria-label="Subsystems">{(Object.entries(SUBSYSTEMS) as [Subsystem, typeof SUBSYSTEMS[Subsystem]][]).filter(([id]) => revealed.includes(id)).map(([id, item]) => <button key={id} className={id === subsystem ? 'active' : ''} aria-current={id === subsystem ? 'page' : undefined} onClick={() => { location.hash = id; setSubsystem(id); }}><item.icon size={17}/><span>{item.short}</span>{id === subsystem && <i/>}</button>)}</nav><div className="ms-sidebar-bottom">
+      <div className="ms-sidebar-actions">
+        {onBackToUpload && <button onClick={onBackToUpload}><Upload size={15}/>Back to uploads</button>}
+        {revealed.length < ALL_SUBSYSTEMS.length && <div className="ms-add-subsystem">
+          <button onClick={() => setShowAddMenu(value => !value)} aria-expanded={showAddMenu}><Layers3 size={15}/>Add subsystem</button>
+          {showAddMenu && <div className="ms-add-subsystem-menu">
+            {ALL_SUBSYSTEMS.filter(id => !revealed.includes(id)).map(id => <button key={id} onClick={() => addSubsystem(id)}>{SUBSYSTEMS[id].short}</button>)}
+          </div>}
+        </div>}
+        {onOpenTour && <button onClick={onOpenTour}><CircleHelp size={15}/>Guided tour</button>}
+      </div>
+      <div className="ms-independence"><Layers3 size={17}/><p>Four independent datasets.<br/>One reference workspace.</p></div><button className="ms-help" onClick={() => setShowHelp(true)}><CircleHelp size={16}/>How it works</button><p className="ms-sidebar-version">JAGARAIL <span>v3.0</span></p></div></aside>
     <div className="ms-main"><header className="ms-topbar"><div><Box size={13}/><span>Reference workspace</span><ChevronRight size={12}/><strong>{config.short}</strong></div><span className="ms-mode-chip">UPLOADED SOURCES</span></header>
       <main id="workspace-content" className="ms-workspace" tabIndex={-1}>
         <div className="ms-page-heading"><div><div className="ms-eyebrow">{config.label}</div><h1>{config.title}</h1><p>{config.description}</p></div><button className="ms-button" disabled={(recordingModel ? !allAnalysed : !exportableDoorJob) || exporting || Boolean(activeBusy)} onClick={() => void saveZip()}><ArrowDownToLine size={14}/>predictions.zip</button></div>
+        <NextSteps concealReplay={Boolean(selectedReplayCycle && (!replay.completed || replay.playing))} doorAnalysis={doorJob} modelAnalysis={modelJob} onCycle={selectDoorCycle} onCar={carId => selectComponent({ kind: 'car', carId, ordinal: carIds.indexOf(carId) + 1 })} onRailSide={side => selectComponent({ kind: 'railSide', side })}/>
+        {progress[subsystem] && (() => {
+          const info = progress[subsystem]!;
+          const checkingDone = info.stage === 'analysing' || info.stage === 'done' || info.stage === 'error' && info.failedAt === 'analysing';
+          return <section className="ms-progress-board" aria-label="Processing status"><div className="ms-progress-card" aria-live="polite">
+            <header><h3><config.icon size={16}/>{config.short}</h3><span className={`ms-kind ${info.stage === 'done' ? 'predicted' : 'derived'}`}>{info.stage === 'error' ? 'Needs attention' : info.stage === 'done' ? 'Complete' : info.stage === 'queued' ? 'Queued' : 'Processing'}</span></header>
+            <ol className="ms-progress-steps">{[
+              { label: 'Checking & validating files', done: checkingDone, active: info.stage === 'uploading', failed: info.stage === 'error' && info.failedAt === 'uploading' },
+              { label: 'Running model inference', done: info.stage === 'done', active: info.stage === 'analysing', failed: info.stage === 'error' && info.failedAt === 'analysing' },
+            ].map(step => <li key={step.label} className={step.done ? 'done' : step.active ? 'active' : step.failed ? 'failed' : ''}><span className="step-icon">{step.done ? <Check size={12}/> : step.active ? <LoaderCircle size={12} className="spin"/> : step.failed ? <X size={12}/> : null}</span>{step.label}</li>)}</ol>
+            {info.stage === 'queued' && <p>Waiting for the preceding subsystem to finish.</p>}
+            {info.stage === 'error' && <><p className="ms-progress-error">{info.message}</p><button className="ms-button small ms-progress-retry" disabled={Boolean(activeBusy)} onClick={() => { const files = failedFiles.current[subsystem]; if (files) void addFiles(files); else void runAnalysis(true); }}>Retry {config.short}</button></>}
+          </div></section>;
+        })()}
         <section className="ms-source-panel" aria-label="Recording selection" onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={drop} data-dragging={dragging}>
-          <div className="ms-source-controls"><button className="ms-upload" onClick={() => uploadInput.current?.click()} disabled={Boolean(busy[skey])}><Upload size={16}/><span>Upload recording<small>or drop {config.accept.replaceAll('.', '').toUpperCase()} here</small></span></button><input ref={uploadInput} type="file" multiple accept={config.accept} aria-label="Upload recording files" className="ms-file-input" onChange={event => { if (event.target.files) void addFiles(event.target.files); }}/><label className="ms-file-select"><span>SELECTED RECORDING</span><select aria-label="Selected recording" value={session.selectedId ?? ''} onChange={event => selectRecording(event.target.value)}><option value="" disabled>{activeBusy ? 'Preparing recording…' : 'No recording loaded'}</option>{session.recordings.map(item => <option value={sourceKey(item)} key={sourceKey(item)}>{item.source.fileName}{session.recordings.filter(candidate => candidate.source.fileName === item.source.fileName).length > 1 ? ` · source ${item.source.fileId.split(':').at(-1)?.slice(0, 8)}` : ''}</option>)}</select></label>{recording && <button className="ms-button small" aria-label="Remove selected recording" title="Remove selected recording and its result" disabled={Boolean(activeBusy)} onClick={removeRecording}><X size={14}/></button>}<button className="ms-button primary" onClick={() => void runAnalysis()} disabled={!recording || Boolean(activeBusy)}>{activeBusy ? <LoaderCircle className="spin" size={14}/> : <Activity size={14}/>}<span>{activeBusy ? 'Processing…' : hasResult ? 'Run again' : 'Run analysis'}</span></button>{session.recordings.length > 1 && <button className="ms-button" onClick={() => void runAnalysis(true)} disabled={Boolean(activeBusy)}>Analyse all {session.recordings.length}</button>}<button className="ms-button" onClick={() => void saveCsv()} disabled={!hasResult || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>CSV</button>{recordingModel && session.recordings.length > 1 && <button className="ms-button" onClick={() => void saveAllCsv()} disabled={!allAnalysed || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>All results CSV</button>}</div>
-          <div className="ms-source-context"><Database size={12}/><span>{recording ? `${recording.source.datasetId} / ${recording.source.fileName} · ${recording.rowCount.toLocaleString()} rows · ${recording.fields.length} source fields` : 'Inspect source fields in your browser. Run analysis sends the original file to the model backend.'}</span>{recording && <span className="ms-door-route">Prediction: trained backend model</span>}{activeBusy && <strong role="status">{activeBusy}</strong>}</div>
+          <div className="ms-source-controls"><button className="ms-upload" onClick={() => uploadInput.current?.click()} disabled={Boolean(activeBusy)}><Upload size={16}/><span>Upload recording<small>or drop {config.accept.replaceAll('.', '').toUpperCase()} here</small></span></button><input ref={uploadInput} type="file" multiple accept={config.accept} aria-label="Upload recording files" className="ms-file-input" disabled={Boolean(activeBusy)} onChange={event => { if (event.target.files) void addFiles(event.target.files); }}/><label className="ms-file-select"><span>SELECTED RECORDING</span><select aria-label="Selected recording" value={session.selectedId ?? ''} onChange={event => selectRecording(event.target.value)}><option value="" disabled>{activeBusy ? 'Preparing recording…' : 'No recording loaded'}</option>{session.recordings.map(item => <option value={sourceKey(item)} key={sourceKey(item)}>{item.source.fileName}{session.recordings.filter(candidate => candidate.source.fileName === item.source.fileName).length > 1 ? ` · source ${item.source.fileId.split(':').at(-1)?.slice(0, 8)}` : ''}</option>)}</select></label>{recording && <button className="ms-button small" aria-label="Remove selected recording" title="Remove selected recording and its result" disabled={Boolean(activeBusy)} onClick={removeRecording}><X size={14}/></button>}<button className="ms-button primary" onClick={() => void runAnalysis()} disabled={!recording || Boolean(activeBusy)}>{activeBusy ? <LoaderCircle className="spin" size={14}/> : <Activity size={14}/>}<span>{progress[subsystem]?.stage === 'queued' ? 'Queued…' : activeBusy ? 'Processing…' : hasResult ? 'Run again' : 'Run analysis'}</span></button>{session.recordings.length > 1 && <button className="ms-button" onClick={() => void runAnalysis(true)} disabled={Boolean(activeBusy)}>Analyse all {session.recordings.length}</button>}<button className="ms-button" onClick={() => void saveCsv()} disabled={!hasResult || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>CSV</button>{recordingModel && session.recordings.length > 1 && <button className="ms-button" onClick={() => void saveAllCsv()} disabled={!allAnalysed || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>All results CSV</button>}</div>
+          <div className="ms-source-context"><Database size={12}/><span>{recording ? `${recording.source.datasetId} / ${recording.source.fileName} · ${recording.rowCount.toLocaleString()} rows · ${recording.fields.length} source fields` : 'Upload a recording to inspect its fields and automatically run the trained model.'}</span>{recording && <span className="ms-door-route">Prediction: trained backend model</span>}{activeBusy && <strong role="status">{activeBusy}</strong>}</div>
         </section>
         {error && <div className="ms-error" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}><X size={15}/></button></div>}
         {recording?.warnings.length ? <details className="ms-source-warnings"><summary><CircleHelp size={12}/>{recording.warnings.length} source note{recording.warnings.length === 1 ? '' : 's'}<ChevronDown size={12}/></summary>{recording.warnings.map(warning => <p key={warning}>{warning}</p>)}</details> : null}
-        <section id="subsystem-train" className="ms-train-panel" aria-label="Eight-car reference workspace"><div className="ms-scene-heading"><div><span className="ms-eyebrow">01 · WHAT WAS ANALYSED</span><h2>{subsystem === 'door' ? 'Recorded door movements' : subsystem === 'acv' ? 'Eight cars. Recorded conditions.' : subsystem === 'rail' ? 'Follow the evidence to the rail side.' : 'Stress in context.'}</h2><p>{subsystem === 'door' ? 'Illustrative location; physical asset metadata unavailable' : subsystem === 'shm' ? 'Reference layout — asset mapping not supplied' : subsystem === 'acv' ? recording ? 'Stable labelled schematic order · car identities are preserved from this file' : 'Select a case to discover its exact car identifiers · schematic placeholders shown' : '64 axle boxes · 128 measurement channels · two reference rail sides'}</p></div><div className="ms-scene-controls"><label><input type="checkbox" checked={xray} onChange={event => setXray(event.target.checked)}/>X-ray</label><button className="ms-button small" onClick={() => { selectComponent({ kind: 'recording' }); setFitKey(value => value + 1); }}><Focus size={13}/>Fit train</button></div></div>
-          <div className="ms-scene"><Suspense fallback={<div className="ms-scene-loading"><LoaderCircle className="spin" size={24}/>Loading reference layout</div>}><ReferenceTrainScene subsystem={subsystem} carIds={carIds} selection={session.selection} onSelect={selectComponent} xray={xray} reducedMotion={reducedMotion} fitKey={fitKey} visualization={visualization} source={recording?.source ?? null} cursorLabel={timestamp} sensorReadout={inspected && session.selection.kind === 'axleBox' ? { vibration: vibrationField ? numericValue(row[vibrationField.columnIndex]) : null, shock: shockField ? numericValue(row[shockField.columnIndex]) : null } : undefined}/></Suspense></div>
+        <section id="subsystem-train" className="ms-train-panel" aria-label={subsystem === 'door' ? 'Representative cabin workspace' : 'Eight-car reference workspace'}><div className="ms-scene-heading"><div><span className="ms-eyebrow">01 · WHAT WAS ANALYSED</span><h2>{subsystem === 'door' ? 'Recorded door movements' : subsystem === 'acv' ? 'Eight cars. Recorded conditions.' : subsystem === 'rail' ? 'Follow the evidence to the rail side.' : 'Stress in context.'}</h2><p>{subsystem === 'door' ? 'Illustrative location; physical asset metadata unavailable' : subsystem === 'shm' ? 'Reference layout — asset mapping not supplied' : subsystem === 'acv' ? recording ? 'Stable labelled schematic order · car identities are preserved from this file' : 'Select a case to discover its exact car identifiers · schematic placeholders shown' : '64 axle boxes · 128 measurement channels · two reference rail sides'}</p></div><div className="ms-scene-controls"><label><input type="checkbox" checked={xray} onChange={event => setXray(event.target.checked)}/>X-ray</label><button className="ms-button small" onClick={() => { selectComponent({ kind: 'recording' }); setFitKey(value => value + 1); }}><Focus size={13}/>Fit train</button></div></div>
+          <div className="ms-scene">{subsystem === 'acv' && recording && showCabinHint && <div className="ms-cabin-hint" role="status"><Info size={14}/><span>Click on a train cabin to select and inspect it.</span><button aria-label="Dismiss hint" onClick={() => setShowCabinHint(false)}><X size={13}/></button></div>}<Suspense fallback={<div className="ms-scene-loading"><LoaderCircle className="spin" size={24}/>Loading reference layout</div>}><ReferenceTrainScene subsystem={subsystem} carIds={carIds} selection={session.selection} onSelect={selectComponent} xray={xray} reducedMotion={reducedMotion} fitKey={fitKey} visualization={visualization} source={recording?.source ?? null} cursorLabel={timestamp} sensorReadout={inspected && session.selection.kind === 'axleBox' ? { vibration: vibrationField ? numericValue(row[vibrationField.columnIndex]) : null, shock: shockField ? numericValue(row[shockField.columnIndex]) : null } : undefined}/></Suspense></div>
           {selectedReplayCycle && <section id="door-replay" className="ms-door-replay" aria-label="Recorded Door replay">
           <DoorReplayTimeline cycles={replayCycles} selectedIndex={selectedDoorCycle ?? 0} playing={replay.playing} progress={replay.progress} onPlay={replay.play} onPause={replay.pause} onPrevious={replay.previous} onNext={replay.next} onSelect={replay.select} reducedMotion={reducedMotion}/>
             <details className="ms-motion-alternative"><summary>Illustrative movement detail · physical door identity unavailable</summary><DoorMotionVisual operation={selectedReplayCycle.operation} progress={replay.progress} completed={replay.completed} prediction={selectedReplayCycle.prediction} reducedMotion={reducedMotion}/></details>
           </section>}
-          <nav className="ms-car-navigator" aria-label="Carriage navigator"><span>REFERENCE CARS</span>{carIds.map((id, index) => <button key={`${id}-${index}`} className={ordinal === index + 1 ? 'active' : ''} aria-label={`Select car ${id}`} aria-pressed={ordinal === index + 1} onClick={() => selectComponent({ kind: 'car', carId: id, ordinal: index + 1 })}><TrainFront size={13}/><strong>{id}</strong></button>)}</nav>
+          {subsystem !== 'door' && <nav className="ms-car-navigator" aria-label="Carriage navigator"><span>REFERENCE CARS</span>{carIds.map((id, index) => <button key={`${id}-${index}`} className={ordinal === index + 1 ? 'active' : ''} aria-label={`Select car ${id}`} aria-pressed={ordinal === index + 1} onClick={() => selectComponent({ kind: 'car', carId: id, ordinal: index + 1 })}><TrainFront size={13}/><strong>{id}</strong></button>)}</nav>}
           <div className="ms-scene-note"><span><span className="ms-kind metadata">Metadata</span>{subsystem === 'rail' ? 'Reference travel: −X. Side I = −Z; Side II = +Z. Camera rotation does not change channel identity.' : 'Drawn geometry is schematic. Dataset recordings do not establish a shared physical train or timeline.'}</span><label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)}/>Reduce motion</label></div>
         </section>
         <ResultSummary result={result} recording={recording} onCycle={selectDoorCycle} onCar={carId => selectComponent({ kind: 'car', carId, ordinal: carIds.indexOf(carId) + 1 })} doorAnalysis={doorJob} modelAnalysis={modelJob} selectedCycle={selectedDoorCycle} concealReplay={Boolean(selectedReplayCycle && (!replay.completed || replay.playing))}/>
@@ -334,6 +450,6 @@ export default function SubsystemWorkspace() {
       </main>
     </div>
     {notice && <div className="ms-notice" role="status"><Check size={14}/>{notice}</div>}
-    <dialog className="ms-dialog" ref={helpRef} onClose={() => setShowHelp(false)} onClick={event => { if (event.target === event.currentTarget) setShowHelp(false); }}><div><header><h2>One workspace. Four independent sources.</h2><button aria-label="Close help" onClick={() => setShowHelp(false)}><X size={17}/></button></header><ol><li>Select the subsystem that matches your recording.</li><li>Upload CSV or ACV XLSX data. Run analysis to apply the subsystem’s supplied trained model.</li><li>Select a relevant car, axle box or unlocated stream to inspect actual recorded fields.</li><li>Use the sample cursor, metric selector and pinned fields to review evidence.</li><li>Download the selected result as CSV. For ACV, Rail and SHM, analyse all loaded recordings to download their combined CSV or predictions.zip.</li></ol><p>Door results classify detected cycles. ACV ranks the eight cars for inspection; Rail returns a classification per recording; SHM returns a fatigue damage estimate per recording. No shared train identity or synchronized timeline is implied.</p><p>All four subsystems run their supplied models in the backend. ACV ranks cars under the model’s one-leaking-car-per-case assumption; the result is an inspection priority, not a confirmed diagnosis. For Door, the ZIP uses the currently selected analysed stream because its required CSV has no file identifier column.</p><button className="ms-button primary" onClick={() => setShowHelp(false)}>Return to workspace</button></div></dialog>
+    <dialog className="ms-dialog" ref={helpRef} onClose={() => setShowHelp(false)} onClick={event => { if (event.target === event.currentTarget) setShowHelp(false); }}><div><header><h2>One workspace. Four independent sources.</h2><button aria-label="Close help" onClick={() => setShowHelp(false)}><X size={17}/></button></header><ol><li>Select the subsystem that matches your recording.</li><li>Upload CSV or ACV XLSX data. Analysis runs automatically using the subsystem’s supplied trained model.</li><li>Select a relevant car, axle box or unlocated stream to inspect actual recorded fields.</li><li>Use the sample cursor, metric selector and pinned fields to review evidence.</li><li>Download the selected result as CSV. For ACV, Rail and SHM, analyse all loaded recordings to download their combined CSV or predictions.zip.</li></ol><p>Door results classify detected cycles. ACV ranks the eight cars for inspection; Rail returns a classification per recording; SHM returns a fatigue damage estimate per recording. No shared train identity or synchronized timeline is implied.</p><p>All four subsystems run their supplied models in the backend. ACV ranks cars under the model’s one-leaking-car-per-case assumption; the result is an inspection priority, not a confirmed diagnosis. For Door, the ZIP uses the currently selected analysed stream because its required CSV has no file identifier column.</p><button className="ms-button primary" onClick={() => setShowHelp(false)}>Return to workspace</button></div></dialog>
   </div>;
 }

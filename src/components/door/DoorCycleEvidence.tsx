@@ -22,7 +22,7 @@ const TRACES: Record<Trace, { label: string; unit: string }> = {
   voltage_V: { label: 'Motor voltage', unit: 'V' },
   position_raw: { label: 'Recorded position', unit: 'raw dataset units' },
 };
-const PLOT = { width: 760, height: 254, left: 56, right: 19, top: 18, bottom: 54 };
+const PLOT = { width: 820, height: 300, left: 82, right: 24, top: 22, bottom: 66 };
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const rawNumber = (value: unknown): string => finite(value) ? String(value) : 'Unavailable';
 function tickNumber(value: number): string {
