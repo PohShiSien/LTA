@@ -15,14 +15,15 @@ describe('CSV boundary and provenance', () => {
     expect(() => parseCsv('a,b\n"closed"oops,2')).toThrow('Unexpected');
   });
 
-  it('does not merge files with the same filename across subsystem, dataset, mode or contents', async () => {
+  it('does not merge files with the same filename across subsystem, dataset or contents', async () => {
     const text = fixtureText('shm-stress.csv');
-    const a = await parseRecording('Test.csv', text, 'shm', 'uploaded', 'dataset-a');
-    const b = await parseRecording('Test.csv', text, 'shm', 'uploaded', 'dataset-b');
-    const c = await parseRecording('Test.csv', text, 'shm', 'demo', 'dataset-a');
-    const d = await parseRecording('Test.csv', `${text}\n2`, 'shm', 'uploaded', 'dataset-a');
-    const e = await parseRecording('Test.csv', fixtureText('door-controller.csv'), 'door', 'uploaded', 'dataset-a');
-    expect(new Set([a, b, c, d, e].map(recording => recording.source.fileId)).size).toBe(5);
+    const a = await parseRecording('Test.csv', text, 'shm', 'dataset-a');
+    const b = await parseRecording('Test.csv', text, 'shm', 'dataset-b');
+    const c = await parseRecording('Test.csv', `${text}\n2`, 'shm', 'dataset-a');
+    const d = await parseRecording('Test.csv', fixtureText('door-controller.csv'), 'door', 'dataset-a');
+    const repeated = await parseRecording('Test.csv', text, 'shm', 'dataset-a');
+    expect(new Set([a, b, c, d].map(recording => recording.source.fileId)).size).toBe(4);
+    expect(repeated.source.fileId).toBe(a.source.fileId);
     expect(a.fields[0].source).toEqual(a.source);
   });
 });

@@ -1,7 +1,5 @@
-/** Explanatory display state. It never changes an inference result or asset mapping. */
+/** Recorded replay display state. It never changes an inference result or asset mapping. */
 export interface SubsystemVisualState {
-  analysisPhase: 'idle' | 'scanning' | 'settled';
-  scanProgress: number;
   door?: {
     cycleNumber: number;
     operation: 'Open' | 'Close' | 'Unknown';

@@ -26,7 +26,7 @@ async function analyseDoor(page: Page): Promise<DoorAnalysis> {
 
 test.beforeEach(async ({ page }) => { await page.emulateMedia({ reducedMotion: 'reduce' }); });
 
-test('Door upload uses frozen API, displays every cycle, and exports exact backend bytes in CSV and a flat combined ZIP', async ({ page, request }) => {
+test('Door upload uses frozen API, displays every cycle, and downloads the exact backend CSV and ZIP', async ({ page, request }) => {
   const analysis = await analyseDoor(page);
   expect(analysis.model_name).toBe('logistic_regression');
   expect(analysis.summary.rows).toBe(9);
@@ -52,13 +52,16 @@ test('Door upload uses frozen API, displays every cycle, and exports exact backe
   expect(readFileSync((await csv.path())!)).toEqual(expectedCsv);
   await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: 'Structural health', exact: true }).click();
   await page.getByLabel('Upload recording files').setInputFiles(resolve('tests/fixtures/recordings/shm-stress.csv'));
-  await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeDisabled();
+  await expect(result(page)).toContainText('Waiting for trained model package');
   const archivePending = page.waitForEvent('download');
+  const zipResponse = page.waitForResponse(response => response.url() === `${api}${analysis.downloads.zip}`);
   await page.getByRole('button', { name: /predictions.zip/ }).click();
   const zip = await archivePending;
-  const files = unzipSync(readFileSync((await zip.path())!));
-  expect(Object.keys(files).sort()).toEqual(['door_predictions.csv', 'shm_predictions.csv']);
+  const zipBytes = readFileSync((await zip.path())!);
+  expect(zipBytes).toEqual(await (await zipResponse).body());
+  const files = unzipSync(zipBytes);
+  expect(Object.keys(files)).toEqual(['door_predictions.csv']);
   expect(Buffer.from(files['door_predictions.csv'])).toEqual(expectedCsv);
 });
 
@@ -71,10 +74,8 @@ test('failed uploaded Door inference has no browser fallback and does not leave 
   await expect(result(page).locator('tbody tr')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeDisabled();
   await expect(page.locator('#door-cycle-evidence')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Synthetic demo', exact: true }).click();
-  await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
-  await expect(result(page)).toContainText('3 door cycles classified');
-  await expect(result(page)).toContainText('SYNTHETIC DEMONSTRATION');
+  await expect(page.getByRole('button', { name: 'Synthetic demo', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
 });
 
 test('expired Door detail and exports offer re-analysis and do not reconstruct the CSV', async ({ page }) => {
@@ -134,7 +135,7 @@ test('full supplied Door Test matches the frozen acceptance predictions and cove
   }
   expect(next).toBe(6253);
   await expect(result(page).locator('tbody tr')).toHaveCount(38);
-  const expected = readFileSync(resolve('backend/door/railwitness_door_pipeline/outputs/door_predictions.csv'));
+  const expected = readFileSync(resolve('tests/fixtures/door/door_predictions.csv'));
   expect(await (await request.get(`${api}${analysis.downloads.csv}`)).body()).toEqual(expected);
 });
 

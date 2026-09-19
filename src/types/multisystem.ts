@@ -1,7 +1,4 @@
 export type Subsystem = 'door' | 'acv' | 'rail' | 'shm';
-export type RailClass = 'Normal' | 'Side I' | 'Side II';
-export type ValueKind = 'recorded' | 'derived' | 'predicted' | 'metadata';
-export type SourceMode = 'uploaded' | 'demo';
 export type CellValue = string | number | null;
 
 export interface SourceRef {
@@ -9,17 +6,12 @@ export interface SourceRef {
   subsystem: Subsystem;
   fileId: string;
   fileName: string;
-  mode: SourceMode;
-  recordId?: string;
 }
 export type PhysicalAnchor =
   | { kind: 'car'; carId: string }
-  | { kind: 'door'; carId: string; doorId: string }
-  | { kind: 'axleBox'; carOrdinal: number; position: number }
-  | { kind: 'railSide'; side: 'Side I' | 'Side II' }
-  | { kind: 'measurementPoint'; pointId: string; meshKey: string };
+  | { kind: 'axleBox'; carOrdinal: number; position: number };
 export type Mapping =
-  | { status: 'mapped'; anchor: PhysicalAnchor; provenance: string; basis: 'dataset-schema' | 'verified-metadata' }
+  | { status: 'mapped'; anchor: PhysicalAnchor; provenance: string; basis: 'dataset-schema' }
   | { status: 'unmapped'; reason: string };
 export interface DisplayField {
   source: SourceRef;
@@ -27,8 +19,8 @@ export interface DisplayField {
   columnIndex: number;
   originalHeader: string;
   label: string;
-  kind: ValueKind;
-  scope: 'sample' | 'cycle' | 'car-case' | 'recording';
+  kind: 'recorded' | 'metadata';
+  scope: 'sample' | 'recording';
   rawUnit: string | null;
   displayUnit: string | null;
   displayScale?: number;
@@ -56,8 +48,6 @@ export interface DoorSegment {
   prediction: 'Normal' | 'Abnormal resistance';
   startIndex: number;
   endIndex: number;
-  /** Recorded movement flags, when the source adapter supplies them. Not an asset identity. */
-  operation?: 'Open' | 'Close';
 }
 export interface ModelInfo {
   version: string;
@@ -66,20 +56,17 @@ export interface ModelInfo {
   training: string;
   validation: string;
 }
-export type AnalysisResult = {
+export interface AnalysisResult {
   source: SourceRef;
   model: ModelInfo;
   analysedAt: string;
   notes: string[];
-} & (
-  | { subsystem: 'door'; scope: 'cycle'; segments: DoorSegment[] }
-  | { subsystem: 'acv'; scope: 'car-case'; rankedCars: string[]; scores?: Record<string, number> }
-  | { subsystem: 'rail'; scope: 'recording'; prediction: RailClass }
-  | { subsystem: 'shm'; scope: 'recording'; predictedDamage: number; mapping: Mapping }
-);
+  subsystem: 'door';
+  scope: 'cycle';
+  segments: DoorSegment[];
+}
 export type ComponentSelection =
   | { kind: 'car'; carId: string; ordinal: number }
   | { kind: 'axleBox'; carOrdinal: number; position: number }
-  | { kind: 'door'; carId: string; doorId: string }
   | { kind: 'railSide'; side: 'Side I' | 'Side II' }
   | { kind: 'recording' };

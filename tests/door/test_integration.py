@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app as api
-from door_pipeline.io import DataError, load_stream
+from door.predict import COLUMNS, DataError, load_stream
 
 
 @pytest.fixture(autouse=True)
@@ -27,8 +27,8 @@ def analyse(client, blob, filename='sample.csv'):
 
 
 def test_deployment_artifact_is_frozen_and_path_cannot_be_overridden(monkeypatch):
-    monkeypatch.setenv('RAILWITNESS_MODEL', str(api.ROOT / 'models/validation_model.joblib'))
-    assert api.MODEL_PATH == api.ROOT / 'models/door_model.joblib'
+    monkeypatch.setenv('RAILWITNESS_MODEL', str(api.ROOT / 'door/validation_model.joblib'))
+    assert api.MODEL_PATH == api.ROOT / 'door/door_model.joblib'
     assert hashlib.sha256(api.MODEL_PATH.read_bytes()).hexdigest() == (
         '077e4a21838857e4b6bb2e5d2c9b9e1c7741a84d00c52a2d41ecb2489750ea7c'
     )
@@ -63,9 +63,9 @@ def test_cycle_detail_retains_recorded_units_and_training_reference(synthetic_cs
             detail = client.get(f'/api/door/jobs/{result["job_id"]}/cycles/{segment["cycle_index"]}').json()
             points = detail['points']
             lo, hi = segment['start_index'], segment['end_index'] + 1
-            np.testing.assert_allclose([p['current_A'] for p in points], stream.column('current')[lo:hi] / 1000)
-            np.testing.assert_allclose([p['voltage_V'] for p in points], stream.column('voltage')[lo:hi] * .01)
-            np.testing.assert_allclose([p['position_raw'] for p in points], stream.column('position')[lo:hi])
+            np.testing.assert_allclose([p['current_A'] for p in points], stream.x[lo:hi,COLUMNS.index('current')] / 1000)
+            np.testing.assert_allclose([p['voltage_V'] for p in points], stream.x[lo:hi,COLUMNS.index('voltage')] * .01)
+            np.testing.assert_allclose([p['position_raw'] for p in points], stream.x[lo:hi,COLUMNS.index('position')])
             assert points[0]['elapsed_fraction'] == 0
             assert points[-1]['elapsed_fraction'] == 1
             reference = detail['reference']

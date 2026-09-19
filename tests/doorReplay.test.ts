@@ -21,6 +21,7 @@ function timeline(playing = false, progress = 1, selectedIndex = 1) {
 function detail(): DoorCycleDetail {
   return {
     segment: { cycle_index: 1, cycle_id: 'cycle_002', start_time: cycles[1].startTime, end_time: cycles[1].endTime,
+      start_index: cycles[1].startIndex, end_index: cycles[1].endIndex,
       prediction: 'Abnormal resistance', operation_inferred: 'Close', abnormal_model_score: 0.723456789,
       score_description: 'Uncalibrated model output.', duration_s: 1.02, n_rows: 3, mean_current_A: 1, peak_current_A: 1.2,
       asset_id: null, recommendation: 'Review this recorded movement before maintenance.', data_quality_warnings: ['Short recorded cycle.'] },

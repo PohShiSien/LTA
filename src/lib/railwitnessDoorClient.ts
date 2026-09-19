@@ -3,8 +3,8 @@ export type DoorLabel = 'Normal' | 'Abnormal resistance';
 export interface DoorCycle {
   cycle_index: number;
   cycle_id: string; // Recording-local identifier; never a physical door identity.
-  start_index?: number;
-  end_index?: number; // Zero-based, inclusive.
+  start_index: number;
+  end_index: number; // Zero-based, inclusive.
   start_time: string;
   end_time: string;
   prediction: DoorLabel;
@@ -85,11 +85,10 @@ function validCycle(value: unknown): value is DoorCycle {
     && finite(value.duration_s) && value.duration_s >= 0 && integer(value.n_rows, 1)
     && finite(value.mean_current_A) && finite(value.peak_current_A) && value.asset_id === null
     && text(value.recommendation) && strings(value.data_quality_warnings)
-    && ((value.start_index === undefined && value.end_index === undefined)
-      || (integer(value.start_index) && integer(value.end_index) && value.end_index - value.start_index + 1 === value.n_rows));
+    && integer(value.start_index) && integer(value.end_index) && value.end_index - value.start_index + 1 === value.n_rows;
 }
 
-/** Validate counts and contiguous coverage even when older compatible servers omit row indices. */
+/** Validate counts and explicit, contiguous coverage of every source row. */
 export function validateDoorAnalysis(value: unknown): DoorAnalysis {
   contract(record(value), 'analysis object');
   contract(text(value.job_id) && /^[a-zA-Z0-9_-]+$/.test(value.job_id), 'job identifier');
@@ -108,8 +107,8 @@ export function validateDoorAnalysis(value: unknown): DoorAnalysis {
   for (const [index, segment] of segments.entries()) {
     contract(segment.cycle_index === index && !cycleIds.has(segment.cycle_id), 'cycle index sequence');
     cycleIds.add(segment.cycle_id);
-    contract(segment.start_index === undefined || segment.start_index === nextIndex, 'contiguous source row coverage');
-    nextIndex += segment.n_rows;
+    contract(segment.start_index === nextIndex, 'contiguous source row coverage');
+    nextIndex = segment.end_index + 1;
   }
   contract(nextIndex === summary.rows, 'complete source row coverage');
   contract(segments.filter(segment => segment.prediction === 'Normal').length === summary.normal, 'classification totals');
@@ -217,9 +216,5 @@ export function createDoorClient(baseUrl = 'http://127.0.0.1:8000') {
     },
     csv(jobId: string, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> { return download(jobId, 'csv', signal); },
     zip(jobId: string, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> { return download(jobId, 'zip', signal); },
-    downloadUrl(path: string): string {
-      if (!/^\/api\/door\/jobs\/[a-zA-Z0-9_-]+\/predictions\.(csv|zip)$/.test(path)) throw new Error('Unexpected Door download path.');
-      return base + path;
-    },
   };
 }

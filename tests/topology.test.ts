@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CAR_COUNT, CAR_LENGTH, CAR_PITCH, RAIL_AXLE_BOXES, RAIL_CHANNELS,
-  RAIL_SIDES, SPEED_COLUMN_INDEX, carCenterX, railChannelIndexes,
+  CAR_COUNT, CAR_LENGTH, CAR_PITCH, RAIL_AXLE_BOXES,
+  RAIL_SIDES, carCenterX, railChannelIndexes,
   referenceCarIds, selectedCarOrdinal,
 } from '../src/lib/topology';
 
@@ -51,12 +51,11 @@ describe('documented eight-car reference topology', () => {
     });
   });
   it('addresses each of 128 measurement columns once and keeps speed separate', () => {
-    expect(RAIL_CHANNELS).toHaveLength(128);
-    expect(new Set(RAIL_CHANNELS.map(channel => channel.key)).size).toBe(128);
-    expect(RAIL_CHANNELS.map(channel => channel.columnIndex).sort((a,b) => a-b)).toEqual(Array.from({ length: 128 }, (_, index) => index + 1));
-    expect(SPEED_COLUMN_INDEX).toBe(0);
-    expect(RAIL_CHANNELS.some(channel => channel.columnIndex === SPEED_COLUMN_INDEX)).toBe(false);
-    expect(RAIL_CHANNELS.filter(channel => channel.carOrdinal === 3 && channel.position === 5).map(channel => channel.columnIndex)).toEqual([41,42]);
+    const columns = RAIL_AXLE_BOXES.flatMap(anchor => [anchor.vibrationIndex, anchor.shockIndex]);
+    expect(columns.sort((a,b) => a-b)).toEqual(Array.from({ length: 128 }, (_, index) => index + 1));
+    expect(columns).not.toContain(0);
+    const anchor = RAIL_AXLE_BOXES.find(item => item.carOrdinal === 3 && item.position === 5)!;
+    expect([anchor.vibrationIndex, anchor.shockIndex]).toEqual([41,42]);
   });
   it('keeps exact car identifiers in a deterministic schematic order', () => {
     const ids = ['08','02','01','04','03','06','05','07'];
@@ -69,7 +68,6 @@ describe('documented eight-car reference topology', () => {
     const ids = referenceCarIds([]);
     expect(selectedCarOrdinal({ kind: 'axleBox', carOrdinal: 3, position: 5 }, ids)).toBe(3);
     expect(selectedCarOrdinal({ kind: 'car', carId: '06', ordinal: 6 }, ids)).toBe(6);
-    expect(selectedCarOrdinal({ kind: 'door', carId: '02', doorId: 'R1' }, ids)).toBe(2);
     expect(selectedCarOrdinal({ kind: 'recording' }, ids)).toBeNull();
     expect(selectedCarOrdinal({ kind: 'railSide', side: 'Side I' }, ids)).toBeNull();
     expect(selectedCarOrdinal({ kind: 'car', carId: 'unknown', ordinal: 3 }, ids)).toBeNull();

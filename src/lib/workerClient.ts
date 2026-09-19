@@ -1,17 +1,14 @@
-import type { AnalysisResult, CellValue, ComponentSelection, RecordingSummary, Subsystem } from '../types/multisystem';
+import type { CellValue, ComponentSelection, RecordingSummary, Subsystem } from '../types/multisystem';
 import type { SignalInspection } from './signals';
 
 export interface InspectionData { cursor: number; row: CellValue[]; signals: SignalInspection[] }
 export type WorkerRequest =
   | { type: 'load'; subsystem: Subsystem; fileName: string; contents: ArrayBuffer; datasetId: string }
-  | { type: 'demo'; subsystem: Subsystem }
-  | { type: 'analyse'; key: string }
   | { type: 'inspect'; key: string; cursor: number; fields: string[] }
-  | { type: 'visualEvidence'; key: string }
   | { type: 'remove'; key: string };
-export const sourceKey = (recording: Pick<RecordingSummary, 'source'> | AnalysisResult) => {
+export const sourceKey = (recording: Pick<RecordingSummary, 'source'>) => {
   const source = recording.source;
-  return `${source.mode}:${source.subsystem}:${source.datasetId}:${source.fileId}`;
+  return `${source.subsystem}:${source.datasetId}:${source.fileId}`;
 };
 let worker: Worker | undefined;
 let sequence = 0;
@@ -40,7 +37,5 @@ export function workerRequest<T>(request: WorkerRequest): Promise<T> {
 export function initialSelection(subsystem: Subsystem, recording?: RecordingSummary): ComponentSelection {
   if (!recording) return { kind: 'recording' };
   if (subsystem === 'rail') return { kind: 'axleBox', carOrdinal: 1, position: 1 };
-  // Start case-level ranking at the whole train; a user car selection opts into camera focus.
-  if (subsystem === 'acv') return { kind: 'recording' };
   return { kind: 'recording' };
 }

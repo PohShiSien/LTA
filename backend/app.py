@@ -1,4 +1,4 @@
-"""Local upload/inference/evidence/download app. Run: python -m uvicorn app:app --host 127.0.0.1 --port 8000."""
+"""Local Door API. Run: python -B -m uvicorn app:app --app-dir backend --host 127.0.0.1 --port 8000."""
 from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
@@ -6,22 +6,23 @@ from pathlib import Path
 from threading import Lock
 import hashlib
 import io
-import json
 import os
+import sys
 import time
 import uuid
 import zipfile
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 from threadpoolctl import threadpool_limits
-from door_pipeline.io import DataError, Stream, Segment, load_stream, predictions_csv
-from door_pipeline.runtime import load_bundle, predict_stream, cycle_detail
+sys.dont_write_bytecode = True
+from door.predict import DataError, Stream, Segment, load_stream, predictions_csv, load_bundle, predict_stream, cycle_detail
 
 ROOT=Path(__file__).resolve().parent
-MODEL_PATH=Path(os.environ.get('RAILWITNESS_MODEL',str(ROOT/'models/door_model.joblib')))
+# The app always loads the supplied deployment artifact. Validation models and
+# environment-variable path overrides must never change production inference.
+MODEL_PATH=ROOT/'door/door_model.joblib'
 MAX_UPLOAD=25*1024*1024
 MAX_JOBS=6
 JOB_TTL_SECONDS=3600
@@ -30,7 +31,6 @@ app=FastAPI(title='RailWitness Door API',version='1.0.0',description='Offline co
 origins=os.environ.get('RAILWITNESS_CORS_ORIGINS','http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000').split(',')
 app.add_middleware(CORSMiddleware,allow_origins=[x.strip() for x in origins if x.strip()],
                    allow_credentials=False,allow_methods=['GET','POST'],allow_headers=['Content-Type'])
-app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
 
 @dataclass
 class Job:
@@ -54,11 +54,12 @@ def get_job(job_id: str) -> Job:
     with cache_lock:
         for key in list(jobs):
             if time.time()-jobs[key].created>JOB_TTL_SECONDS:del jobs[key]
-        if job_id not in jobs:raise HTTPException(404,'Analysis expired or unknown. Upload the CSV again.')
+        if job_id not in jobs:raise HTTPException(404,'Analysis expired or unknown. Re-analyse the recording, or upload the original CSV again.')
         return jobs[job_id]
 
 @app.get('/',include_in_schema=False)
-def index():return FileResponse(ROOT/'static/index.html')
+def index():
+    return {'service':'RailWitness Door API','frontend':'http://127.0.0.1:5173','docs':'/docs'}
 
 @app.get('/api/health')
 def health():return {'status':'ok','mode':'local_advisory','model_file_present':MODEL_PATH.is_file()}
@@ -83,9 +84,13 @@ def upload_predict(file:UploadFile=File(...)):
     raw=file.file.read(MAX_UPLOAD+1)
     if len(raw)>MAX_UPLOAD:raise HTTPException(413,'File exceeds the 25 MiB limit.')
     try:
+        bundle=model()
+    except (DataError,FileNotFoundError) as exc:
+        raise HTTPException(503,str(exc)) from exc
+    try:
         stream=load_stream(raw);stream.source_name=filename
         with inference_lock,threadpool_limits(limits=1):
-            result,segs,X=predict_stream(model(),stream)
+            result,segs,X=predict_stream(bundle,stream)
     except (DataError,FileNotFoundError) as exc:raise HTTPException(422,str(exc)) from exc
     result['source_sha256']=hashlib.sha256(raw).hexdigest()
     job_id=uuid.uuid4().hex

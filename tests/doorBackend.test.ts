@@ -23,7 +23,7 @@ function analysis(): DoorAnalysis {
 }
 function recording(): RecordingSummary {
   return {
-    source: { subsystem: 'door', mode: 'uploaded', fileName: 'Recording.csv', fileId: 'content-hash', datasetId: 'ps3-door' },
+    source: { subsystem: 'door', fileName: 'Recording.csv', fileId: 'content-hash', datasetId: 'ps3-door' },
     headers: [], fields: [], rowCount: 4, carIds: [], warnings: [], mapping: { status: 'unmapped', reason: 'No asset metadata' },
   };
 }
@@ -79,6 +79,8 @@ describe('frozen Door backend client', () => {
     expect(await client.csv('job_123')).toEqual(csv);
     const downloadedZip = await client.zip('job_123');
     expect(downloadedZip).toEqual(zip); expect(Object.keys(unzipSync(downloadedZip))).toEqual(['door_predictions.csv']);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://127.0.0.1:8000/api/door/jobs/job_123/predictions.csv', { signal: undefined });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://127.0.0.1:8000/api/door/jobs/job_123/predictions.zip', { signal: undefined });
   });
 
   it('reports network, schema and expired-job errors without manufacturing predictions', async () => {
@@ -139,15 +141,17 @@ describe('Door AnalysisResult adapter', () => {
     ]);
   });
 
-  it('supports older backend n_rows coverage while refusing demo or mismatched source manifests', () => {
-    const response = analysis(); response.segments.forEach(segment => { delete segment.start_index; delete segment.end_index; });
-    const result = doorAnalysisResult(response, recording());
-    if (result.subsystem !== 'door') throw new Error('Expected Door');
-    expect(result.segments.map(segment => [segment.startIndex, segment.endIndex])).toEqual([[0, 1], [2, 3]]);
-    const demo = recording(); demo.source.mode = 'demo';
-    expect(() => doorAnalysisResult(response, demo)).toThrow('uploaded Door');
+  it('rejects missing backend row indices and mismatched subsystem or source manifests', async () => {
+    const response = analysis();
+    const missingIndices = { ...response, segments: response.segments.map(segment => ({ ...segment, start_index: undefined, end_index: undefined })) };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(missingIndices)));
+    await expect(createDoorClient().analyse(new File(['x'], 'Recording.csv'))).rejects.toThrow('row indices');
+    const wrongSubsystem = recording(); wrongSubsystem.source.subsystem = 'rail';
+    expect(() => doorAnalysisResult(response, wrongSubsystem)).toThrow('Door recording');
     const short = recording(); short.rowCount = 3;
     expect(() => doorAnalysisResult(response, short)).toThrow('row count');
+    const wrongFile = recording(); wrongFile.source.fileName = 'Different.csv';
+    expect(() => doorAnalysisResult(response, wrongFile)).toThrow('source filename');
   });
 
   it.each([

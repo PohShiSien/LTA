@@ -1,20 +1,21 @@
 import csv
+from dataclasses import replace
+from datetime import datetime, timedelta
 import io
 from pathlib import Path
+from shutil import copyfile
 import subprocess
 import sys
 import zipfile
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
-from door_pipeline.io import DataError,load_stream,parse_timestamp,format_timestamp,make_segment,predictions_csv,COLUMNS
-from door_pipeline.segmentation import GapSegmenter
-from door_pipeline.features import feature_matrix,cycle_signals
-from door_pipeline.metrics import iou,score_segments
-from door_pipeline.runtime import load_bundle,predict_stream,cycle_detail
+from door.predict import (COLUMNS, DataError, GapSegmenter, cycle_detail, cycle_signals,
+                         feature_matrix, load_bundle, load_stream, make_segment,
+                         parse_timestamp, predict_stream, predictions_csv)
 from app import app
 
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]/'backend'
 
 def change_csv(blob,transform):
     rows=list(csv.reader(io.StringIO(blob.decode())));transform(rows)
@@ -29,9 +30,6 @@ def test_native_iso_equivalence():
 @pytest.mark.parametrize('stamp',['2023-13-1-0-0-0-0','wrong','2023-07-05T00:00:00.000001','2023-07-05T00:00:00+08:00'])
 def test_invalid_timestamp(stamp):
     with pytest.raises(DataError):parse_timestamp(stamp)
-
-def test_round_trip():
-    x=parse_timestamp('2023-7-5-1-10-17-112');assert parse_timestamp(format_timestamp(x))==x
 
 def test_reordered_columns(synthetic_csv):
     blob=change_csv(synthetic_csv,lambda rows:[r.reverse() for r in rows])
@@ -63,11 +61,13 @@ def test_units_and_direction(synthetic_csv):
     assert a['current'][0]==pytest.approx(.4)
     assert cycle_signals(s,make_segment(s,151,302))['operation']=='Close'
 
-def test_segmenter_fit_then_predict(synthetic_csv):
+def test_segmenter_uses_frozen_parameters(synthetic_csv):
     s=load_stream(synthetic_csv);truth=[make_segment(s,0,151),make_segment(s,151,302)]
-    segmenter=GapSegmenter().fit(s,truth);pred=segmenter.predict(s)
+    parameters=load_bundle(ROOT/'door/door_model.joblib')['segmenter']
+    segmenter=GapSegmenter(**parameters);pred=segmenter.predict(s)
     assert pred==truth
     assert 20<segmenter.threshold_ms<17000
+    assert segmenter.threshold_ms==parameters['threshold_ms']
 
 def test_segmenter_not_flag_edges(synthetic_csv):
     s=load_stream(synthetic_csv);s.x[30:60,COLUMNS.index('is_opening')]=0
@@ -75,9 +75,9 @@ def test_segmenter_not_flag_edges(synthetic_csv):
     assert len(pred)==2
 
 def test_singleton_not_silently_dropped(synthetic_csv):
-    s=load_stream(synthetic_csv);s.t_ms[150]-=2000
     # Use a proper increasing stream with an isolated first sample.
-    s=load_stream(synthetic_csv).subset(150,302)
+    original=load_stream(synthetic_csv)
+    s=replace(original,timestamps=original.timestamps[150:302],t_ms=original.t_ms[150:302],x=original.x[150:302])
     with pytest.raises(DataError):GapSegmenter(threshold_ms=200).predict(s)
 
 def test_97_features_no_clock_or_ids(synthetic_csv):
@@ -90,7 +90,8 @@ def test_97_features_no_clock_or_ids(synthetic_csv):
 def test_features_invariant_to_absolute_clock(synthetic_csv):
     s=load_stream(synthetic_csv);segs=GapSegmenter(threshold_ms=200).predict(s)
     a,_=feature_matrix(s,segs)
-    s.t_ms=s.t_ms+1234567;s.timestamps=[format_timestamp(v) for v in s.t_ms]
+    s.t_ms=s.t_ms+1234567
+    s.timestamps=[(datetime(1970,1,1)+timedelta(milliseconds=int(v))).isoformat(timespec='milliseconds') for v in s.t_ms]
     b,_=feature_matrix(s,GapSegmenter(threshold_ms=200).predict(s))
     np.testing.assert_allclose(a,b,equal_nan=True)
 
@@ -102,37 +103,12 @@ def test_excess_cycle_missing_rejected(synthetic_csv):
     s=load_stream(synthetic_csv);s.x[10:40,COLUMNS.index('current')]=np.nan
     with pytest.raises(DataError):cycle_signals(s,make_segment(s,0,151))
 
-def row(start,end,label='Normal'):
-    return {'start_time':format_timestamp(start),'end_time':format_timestamp(end),'prediction':label}
-
-def test_perfect_scoring():
-    a=[row(0,1000),row(2000,4000,'Abnormal resistance')]
-    assert score_segments(a,a)['iou_weighted_f1']==1
-
-def test_wrong_label_zero():
-    assert score_segments([row(0,1000)],[row(0,1000,'Abnormal resistance')])['iou_weighted_f1']==0
-
-def test_duplicate_prediction_penalty():
-    a=[row(0,1000)];assert score_segments(a,a+a)['iou_weighted_f1']==pytest.approx(2/3)
-
-def test_sloppy_boundaries_partial_credit():
-    assert score_segments([row(0,1000)],[row(0,500)])['iou_weighted_f1']==.5
-
-def test_greedy_best_overlap_first():
-    out=score_segments([row(0,1000)],[row(0,500),row(0,1000)])
-    assert out['matches']==[{'truth_index':0,'prediction_index':1,'iou':1.0}]
-
-def test_touching_intervals_no_positive_overlap():
-    assert iou((0,1000),(1000,2000))==0
-
-def test_empty_predictions_zero():
-    assert score_segments([row(0,1000)],[])['iou_weighted_f1']==0
-
 def test_prediction_schema_only_three_columns():
-    out=predictions_csv([{**row(0,1000),'score':.6}]);assert out.splitlines()[0]=='start_time,end_time,prediction'
+    out=predictions_csv([{'start_time':'2023-7-5-0-0-0-0','end_time':'2023-7-5-0-0-1-0','prediction':'Normal','score':.6}])
+    assert out.splitlines()[0]=='start_time,end_time,prediction'
 
 def test_trained_artifact_and_repeatability(synthetic_csv):
-    b=load_bundle(ROOT/'models/door_model.joblib');s=load_stream(synthetic_csv)
+    b=load_bundle(ROOT/'door/door_model.joblib');s=load_stream(synthetic_csv)
     a,segs,x=predict_stream(b,s);c,_,_=predict_stream(b,s)
     assert a['segments']==c['segments'];assert len(segs)==2
     d=cycle_detail(b,s,segs[0],x[0]);assert d['reference'];assert d['explanations'];assert d['points']
@@ -164,8 +140,21 @@ def test_api_bad_input_returns_actionable_error(name,blob):
 def test_cli_and_api_match(synthetic_csv,tmp_path):
     source=tmp_path/'sample.csv';source.write_bytes(synthetic_csv)
     out=tmp_path/'predictions.csv'
-    p=subprocess.run([sys.executable,str(ROOT/'predict.py'),'--input',str(source),'--output',str(out)],capture_output=True,text=True,timeout=30)
+    p=subprocess.run([sys.executable,str(ROOT/'door/predict.py'),'--input',str(source),'--output',str(out)],capture_output=True,text=True,timeout=30)
     assert p.returncode==0,p.stderr
     with TestClient(app) as client:
         r=client.post('/api/door/predict',files={'file':('sample.csv',synthetic_csv,'text/csv')}).json()
-        assert out.read_bytes()==client.get(r['downloads']['csv']).content
+        expected=client.get(r['downloads']['csv']).content
+        assert out.read_bytes()==expected
+    standalone=tmp_path/'standalone';standalone.mkdir()
+    script=standalone/'predict.py';copyfile(ROOT/'door/predict.py',script)
+    model=standalone/'door_model.joblib';copyfile(ROOT/'door/door_model.joblib',model)
+    default=subprocess.run([sys.executable,str(script),'--input',str(source)],cwd=tmp_path,capture_output=True,text=True,timeout=30)
+    assert default.returncode==0,default.stderr
+    assert (standalone/'door_predictions.csv').read_bytes()==expected
+    for protected in (source,model,script):
+        before=protected.read_bytes()
+        blocked=subprocess.run([sys.executable,str(script),'--input',str(source),'--output',str(protected)],capture_output=True,text=True,timeout=30)
+        assert blocked.returncode!=0
+        assert 'must not overwrite' in blocked.stderr
+        assert protected.read_bytes()==before

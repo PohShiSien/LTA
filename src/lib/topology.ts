@@ -6,7 +6,6 @@ export const CAR_LENGTH = 9;
 export const CAR_GAP = .5;
 export const CAR_PITCH = CAR_LENGTH + CAR_GAP;
 export const TRAIN_LENGTH = CAR_COUNT * CAR_LENGTH + (CAR_COUNT - 1) * CAR_GAP;
-export const SPEED_COLUMN_INDEX = 0;
 export type RailSide = 'Side I' | 'Side II';
 export type Position3 = readonly [number, number, number];
 
@@ -72,18 +71,13 @@ export const RAIL_AXLE_BOXES: readonly AxleBoxAnchor[] = Object.freeze(Array.fro
   });
 }));
 
-export const RAIL_CHANNELS = Object.freeze(RAIL_AXLE_BOXES.flatMap(anchor => ([
-  { key: `${anchor.id}:vibration`, carOrdinal: anchor.carOrdinal, position: anchor.position, kind: 'vibration' as const, columnIndex: anchor.vibrationIndex, side: anchor.side },
-  { key: `${anchor.id}:shock`, carOrdinal: anchor.carOrdinal, position: anchor.position, kind: 'shock' as const, columnIndex: anchor.shockIndex, side: anchor.side },
-])));
-
 export function selectedCarOrdinal(selection: ComponentSelection, carIds: readonly string[]): number | null {
   if (selection.kind === 'axleBox') {
     validateOrdinal(selection.carOrdinal, 'Rail car ordinal');
     validateOrdinal(selection.position, 'Axle-box position');
     return selection.carOrdinal;
   }
-  if (selection.kind === 'car' || selection.kind === 'door') {
+  if (selection.kind === 'car') {
     const index = carIds.indexOf(selection.carId);
     return index >= 0 ? index + 1 : null;
   }

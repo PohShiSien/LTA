@@ -1,5 +1,5 @@
 import { strFromU8, Unzip, UnzipInflate, unzipSync } from 'fflate';
-import type { CellValue, DisplayField, Mapping, Recording, SourceMode, SourceRef, Subsystem } from '../types/multisystem';
+import type { CellValue, DisplayField, Mapping, Recording, SourceRef, Subsystem } from '../types/multisystem';
 import { railChannelIndexes } from './topology';
 
 const NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -192,7 +192,7 @@ function doorField(source: SourceRef, header: string, index: number, mapping: Ma
 }
 
 /** Parse all source samples; display decimation must happen only after this boundary. */
-export async function parseRecording(fileName: string, contents: string | ArrayBuffer, subsystem: Subsystem, mode: SourceMode = 'uploaded', datasetId = `ps3-${subsystem}`): Promise<Recording> {
+export async function parseRecording(fileName: string, contents: string | ArrayBuffer, subsystem: Subsystem, datasetId = `ps3-${subsystem}`): Promise<Recording> {
   if (!fileName.trim()) throw new Error('A source filename is required.');
   let rawTable: CellValue[][];
   const warnings: string[] = [];
@@ -210,7 +210,7 @@ export async function parseRecording(fileName: string, contents: string | ArrayB
     if (!/\.csv$/i.test(fileName)) throw new Error('Upload a CSV recording or an ACV .xlsx case file.');
     rawTable = parseCsv(typeof contents === 'string' ? contents : new TextDecoder('utf-8', { fatal: true }).decode(contents));
   }
-  const source: SourceRef = { datasetId, subsystem, fileName, fileId: `${mode}:${datasetId}:${subsystem}:${fileName}:${contentHash(contents)}`, mode };
+  const source: SourceRef = { datasetId, subsystem, fileName, fileId: `${datasetId}:${subsystem}:${fileName}:${contentHash(contents)}` };
   let headers: string[];
   let data: CellValue[][];
   const firstNumeric = rawTable[0].every(value => numeric(parseCell(value)));

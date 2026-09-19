@@ -2,22 +2,17 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ReferenceTrainScene, type ReferenceTrainSceneProps } from '../src/components/train/ReferenceTrainScene';
-import type { AnalysisResult, RailClass, SourceRef, Subsystem } from '../src/types/multisystem';
+import type { SourceRef, Subsystem } from '../src/types/multisystem';
 
 const ids = ['03', '07', '01', '08', '04', '06', '02', '05'];
-const source = (subsystem: Subsystem): SourceRef => ({ subsystem, datasetId: `ps3-${subsystem}`, fileId: 'one-recording', fileName: 'Test.csv', mode: 'uploaded' });
-const base = (subsystem: Subsystem) => ({ source: source(subsystem), model: { version: 'test', name: 'frozen model', description: '', training: '', validation: '' }, analysedAt: '2026-09-18', notes: [] });
-const rail = (prediction: RailClass): AnalysisResult => ({ ...base('rail'), subsystem: 'rail', scope: 'recording', prediction });
-const acv: AnalysisResult = { ...base('acv'), subsystem: 'acv', scope: 'car-case', rankedCars: ids };
+const source = (subsystem: Subsystem): SourceRef => ({ subsystem, datasetId: `ps3-${subsystem}`, fileId: 'one-recording', fileName: 'Test.csv' });
 
-function render(result: AnalysisResult, overrides: Partial<ReferenceTrainSceneProps> = {}) {
+function render(subsystem: Subsystem, overrides: Partial<ReferenceTrainSceneProps> = {}) {
   // Node has no document/WebGL: exercise the actual accessible scene fallback.
   return renderToStaticMarkup(createElement(ReferenceTrainScene, {
-    subsystem: result.subsystem, carIds: result.subsystem === 'acv' ? ids : [],
-    selection: { kind: 'recording' }, onSelect: () => {}, result, source: result.source,
-    mapping: { status: 'unmapped', reason: 'Physical identity unavailable' },
-    xray: false, reducedMotion: true, fitKey: 0,
-    visualization: { analysisPhase: 'settled', scanProgress: 1 }, ...overrides,
+    subsystem, carIds: subsystem === 'acv' ? ids : [],
+    selection: { kind: 'recording' }, onSelect: () => {}, source: source(subsystem),
+    xray: false, reducedMotion: true, fitKey: 0, ...overrides,
   }));
 }
 
@@ -26,79 +21,68 @@ function buttons(html: string) {
 }
 
 describe('rendered subsystem train schematic', () => {
-  it.each(['Side I', 'Side II'] as const)('highlights only the recording-level %s rail and its documented 32 sensor members', prediction => {
-    const html = render(rail(prediction));
+  it('preserves the 64 recorded sensor addresses and both neutral rail-side controls', () => {
+    const html = render('rail', { selection: { kind: 'railSide', side: 'Side II' } });
     expect(html).toContain('data-renderer="schematic"');
-    expect(html).toContain(`data-rail-class="${prediction}"`);
-    expect(html).toContain(`Corrugation signature detected — ${prediction}`);
+    expect(html).toContain('data-rail-class="uncomputed"');
     const sideButtons = buttons(html).filter(button => button.attributes.includes('aria-label="Select reference rail'));
-    expect(sideButtons).toHaveLength(4); // Both the schematic and persistent rail controls remain keyboard accessible.
+    expect(sideButtons).toHaveLength(4);
     for (const button of sideButtons) {
-      expect(button.attributes.includes('class="is-predicted"')).toBe(button.attributes.includes(`aria-label="Select reference rail ${prediction}"`));
+      expect(button.attributes.includes('aria-pressed="true"')).toBe(button.attributes.includes('aria-label="Select reference rail Side II"'));
     }
-    const sensors = [...html.matchAll(/<i class="([^"]*)" title="Car ([^"]+) · P(\d) · (Side I|Side II)"><\/i>/g)];
+    const sensors = [...html.matchAll(/<i title="Car ([^"]+) · P(\d) · (Side I|Side II)"><\/i>/g)];
     expect(sensors).toHaveLength(64);
-    expect(sensors.filter(sensor => sensor[1].includes('is-side-member'))).toHaveLength(32);
-    for (const sensor of sensors) {
-      expect(sensor[4]).toBe(Number(sensor[3]) % 2 === 1 ? 'Side I' : 'Side II');
-      expect(sensor[1].includes('is-side-member')).toBe(sensor[4] === prediction);
-    }
-    expect(html).toContain('Illustrative rail-side highlight');
-    expect(html).not.toMatch(/defective|bearing fault|track section/i);
+    for (const sensor of sensors) expect(sensor[3]).toBe(Number(sensor[2]) % 2 === 1 ? 'Side I' : 'Side II');
+    expect(html).not.toMatch(/is-predicted|is-side-member|corrugation signature|bearing fault/i);
   });
 
-  it('keeps both rails neutral for Normal without assigning healthy status to individual sensors', () => {
-    const html = render(rail('Normal'));
-    expect(html).toContain('No corrugation signature detected');
-    expect(html).toContain('data-rail-class="Normal"');
-    expect(html).not.toContain('is-predicted');
-    expect(html).not.toContain('is-side-member');
-    expect(html).not.toContain('is-amber');
-    expect(html).toContain('not a component-health assessment');
+  it('shows the selected axle-box source fields and recorded values without a prediction', () => {
+    const html = render('rail', {
+      selection: { kind: 'axleBox', carOrdinal: 2, position: 3 },
+      cursorLabel: '0.025 s', sensorReadout: { vibration: 1.25, shock: 2.5 },
+    });
+    expect(html).toContain('data-selected-car="2"');
+    expect(html).toContain('Car 2 · Axle box 3');
+    expect(html).toContain('1.25 m/s²');
+    expect(html).toContain('2.5 m/s²');
+    expect(html).toContain('0.025 s');
+    expect(html).toContain('<dt>Source columns</dt><dd>22, 23</dd>');
+    expect(html).not.toContain('Predicted:');
   });
 
-  it('preserves all eight exact car identities, unique ranks, and descending rendered emphasis', () => {
-    const html = render(acv);
+  it('preserves all eight exact car identities and source-car selection without inferred ranks', () => {
+    const html = render('acv', { selection: { kind: 'car', carId: '03', ordinal: 3 } });
     const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
     expect(cars).toHaveLength(8);
     expect(cars.map(car => /aria-label="Focus car ([^"]+)"/.exec(car.attributes)![1])).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
-    const ranked = cars.map(car => ({
-      id: /aria-label="Focus car ([^"]+)"/.exec(car.attributes)![1],
-      rank: Number(/data-rank="(\d+)"/.exec(car.attributes)![1]),
-      strength: Number(/--rank-strength:([\d.]+)/.exec(car.attributes)![1]),
-    })).sort((left, right) => left.rank - right.rank);
-    expect(ranked.map(car => car.id)).toEqual(ids);
-    expect(ranked.map(car => car.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(ranked.every((car, index) => index === 0 || car.strength < ranked[index - 1].strength)).toBe(true);
-    expect(cars.find(car => car.attributes.includes('data-rank="1"'))!.content).toContain('CAR 03');
-    expect(html).toContain('relative leak-likelihood ranking');
-    expect(html).not.toMatch(/chance of leak|definitely|healthy/i);
+    expect(cars.find(car => car.attributes.includes('aria-label="Focus car 03"'))!.attributes).toContain('aria-pressed="true"');
+    expect(html).not.toMatch(/data-rank|is-ranked|leak-likelihood|leaking car/);
   });
 
-  it.each([[0, '0.0000'], [.0000012345, '1.2345e-6'], [12.345, '12.345']] as const)('shows unlocated file-level SHM damage %s without car focus or a health conversion', (predictedDamage, display) => {
-    const result: AnalysisResult = { ...base('shm'), subsystem: 'shm', scope: 'recording', predictedDamage, mapping: { status: 'unmapped', reason: 'Location not supplied' } };
-    const html = render(result, { selection: { kind: 'car', carId: '03', ordinal: 3 }, visualization: { analysisPhase: 'settled', scanProgress: 1, stress: { amplitude: .8, progress: .5, playing: true } } });
+  it('keeps SHM stress unlocated and disables the pulse under reduced motion', () => {
+    const html = render('shm', {
+      selection: { kind: 'car', carId: '03', ordinal: 3 },
+      visualization: { stress: { amplitude: .8, progress: .5, playing: true } },
+    });
     expect(html).toContain('data-selected-car=""');
     expect(html).toContain('Measurement location not supplied');
     expect(html).toContain('not a measured spatial distribution');
-    expect(html).toContain(`Predicted damage <b>${display}</b>`);
-    expect(html).not.toContain('is-selected');
-    expect(html).not.toContain('is-ranked');
-    expect(html).not.toMatch(/remaining life|health %|failure probability/i);
+    expect(html).not.toMatch(/is-selected|Predicted damage|remaining life|health %/);
     const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
     expect(cars).toHaveLength(8);
     expect(cars.every(car => car.attributes.includes('disabled=""') && car.attributes.includes('aria-pressed="false"'))).toBe(true);
-    expect(html).toContain('--stress-amplitude:0'); // Reduced motion suppresses the replay pulse.
+    expect(html).toContain('--stress-amplitude:0');
   });
 
-  it('withholds settled highlights during the explanatory scan and rejects another recording’s result', () => {
-    const scanning = render(rail('Side I'), { reducedMotion: false, visualization: { analysisPhase: 'scanning', scanProgress: .5 } });
-    expect(scanning).toContain('Reviewing recorded evidence · visual scan 50%');
-    expect(scanning).toContain('data-rail-class="uncomputed"');
-    expect(scanning).not.toContain('is-side-member');
-    expect(scanning).not.toContain('Corrugation signature detected');
-    const stale = render(acv, { source: { ...source('acv'), fileId: 'another-recording' } });
-    expect(stale).not.toContain('data-rank=');
-    expect(stale).not.toContain('Scan complete');
+  it('shows an illustrative Door movement and reveals its classification only on completion', () => {
+    const door = { cycleNumber: 2, operation: 'Close', progress: .4, completed: false, prediction: 'Abnormal resistance' } as const;
+    const playing = render('door', { visualization: { door } });
+    expect(playing).toContain('Illustrative Close movement, cycle 2');
+    expect(playing).toContain('Physical door identity unavailable');
+    expect(playing).not.toMatch(/Abnormal resistance|is-abnormal|is-amber/);
+    const completed = render('door', { visualization: { door: { ...door, completed: true } } });
+    expect(completed).toContain('Cycle 2 · classified as Abnormal resistance');
+    expect(completed).toContain('is-abnormal');
+    expect(completed).toContain('is-amber');
   });
 });
