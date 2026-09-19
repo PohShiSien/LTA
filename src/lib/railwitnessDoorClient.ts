@@ -208,6 +208,9 @@ export function createDoorClient(baseUrl = 'http://127.0.0.1:8000') {
       // The browser supplies the multipart boundary; do not override Content-Type.
       const analysis = validateDoorAnalysis(await json('/api/door/predict', { method: 'POST', body: form, signal }));
       contract(analysis.source_name === file.name, 'uploaded source filename');
+      const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      const sha256 = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+      contract(analysis.source_sha256.toLowerCase() === sha256, 'uploaded source content');
       return analysis;
     },
     async cycle(jobId: string, index: number, signal?: AbortSignal): Promise<DoorCycleDetail> {

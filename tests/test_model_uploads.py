@@ -204,6 +204,27 @@ def test_upload_extension_and_size_checked_before_model(client, monkeypatch):
     assert not api.recording_jobs
 
 
+def test_acv_larger_upload_limit_preserves_other_limits_and_rejects_before_inference(client, acv_frame, monkeypatch):
+    assert api.MAX_UPLOAD == 25 * 1024 * 1024
+    assert api.MAX_ACV_UPLOAD == 50 * 1024 * 1024
+    raw = acv_frame.to_csv(index=False).encode()
+    monkeypatch.setattr(api, 'MAX_UPLOAD', len(raw) - 1)
+    monkeypatch.setattr(api, 'MAX_ACV_UPLOAD', len(raw))
+    result = analyse(client, 'acv', raw, 'case.csv')
+    assert result['summary']['rows'] == len(acv_frame)
+
+    def unexpected_inference(*args):
+        pytest.fail('Oversized uploads must be rejected before loading a model.')
+
+    monkeypatch.setattr(api, 'model', unexpected_inference)
+    monkeypatch.setattr(api, 'recording_model', unexpected_inference)
+    for subsystem in ('door', 'rail', 'shm', 'acv'):
+        payload = raw + b'\n' if subsystem == 'acv' else raw
+        response = client.post(f'/api/{subsystem}/predict', files={'file': ('case.csv', payload, 'text/csv')})
+        assert response.status_code == 413, response.text
+    assert list(api.recording_jobs) == [result['job_id']]
+
+
 def test_acv_ranked_result_evidence_and_exports_match_script(client, acv_frame, tmp_path):
     paths = [ROOT / 'backend/acv/acv_model.joblib', ROOT / 'backend/acv/acv_predictions.csv']
     before = [hashlib.sha256(path.read_bytes()).hexdigest() for path in paths]

@@ -89,7 +89,10 @@ export function createModelClient(baseUrl = 'http://127.0.0.1:8000') {
   async function request(path: string, init?: RequestInit): Promise<Response> {
     let response: Response;
     try { response = await fetch(base + path, init); }
-    catch (cause) { throw new Error(`Cannot reach the model backend at ${base || 'this server'}. Start the Python backend and check VITE_API_URL, then run analysis again.`, { cause }); }
+    catch (cause) {
+      if (init?.signal?.aborted || (cause instanceof Error && cause.name === 'AbortError')) throw cause;
+      throw new Error(`Cannot reach the model backend at ${base || 'this server'}. Start the Python backend and check VITE_API_URL, then run analysis again.`, { cause });
+    }
     if (!response.ok) {
       let detail = '';
       try { const body: unknown = await response.json(); if (record(body) && text(body.detail)) detail = body.detail; } catch { /* Preserve the HTTP error when an upstream server returns non-JSON. */ }
@@ -104,12 +107,15 @@ export function createModelClient(baseUrl = 'http://127.0.0.1:8000') {
     return bytes;
   }
   return {
-    async analyse(subsystem: RecordingModel, file: File, rowCount: number, expectedCarIds?: string[]): Promise<ModelAnalysis> {
+    async analyse(subsystem: RecordingModel, file: File, rowCount: number, expectedCarIds?: string[], signal?: AbortSignal): Promise<ModelAnalysis> {
       if (!(subsystem === 'acv' ? /\.(csv|xlsx)$/i : /\.csv$/i).test(file.name)) throw new Error(subsystem === 'acv' ? 'Select an ACV recording CSV or XLSX workbook.' : 'Select a raw recording CSV.');
       const form = new FormData(); form.append('file', file);
-      const response = await request(`/api/${subsystem}/predict`, { method: 'POST', body: form });
+      const response = await request(`/api/${subsystem}/predict`, { method: 'POST', body: form, signal });
       let value: unknown;
-      try { value = await response.json(); } catch (cause) { throw new Error('Model backend returned invalid JSON. Check the API URL and run analysis again.', { cause }); }
+      try { value = await response.json(); } catch (cause) {
+        if (signal?.aborted || (cause instanceof Error && cause.name === 'AbortError')) throw cause;
+        throw new Error('Model backend returned invalid JSON. Check the API URL and run analysis again.', { cause });
+      }
       const analysis = validateModelAnalysis(value, subsystem);
       contract(analysis.source_name === file.name && analysis.summary.rows === rowCount, 'uploaded source filename or row count');
       if (analysis.subsystem === 'acv' && expectedCarIds) contract(expectedCarIds.length === 8 && new Set(expectedCarIds).size === 8 && expectedCarIds.every(car => analysis.prediction.includes(car)), 'uploaded ACV source cars');
@@ -118,11 +124,11 @@ export function createModelClient(baseUrl = 'http://127.0.0.1:8000') {
       contract(analysis.source_sha256.toLowerCase() === sha256, 'uploaded source content');
       return analysis;
     },
-    csv(analysis: ModelAnalysis) { return download(analysis.downloads.csv, 'csv', analysis.subsystem); },
-    export(subsystem: RecordingModel, analyses: ModelAnalysis[], format: 'csv' | 'zip') {
+    csv(analysis: ModelAnalysis, signal?: AbortSignal) { return download(analysis.downloads.csv, 'csv', analysis.subsystem, { signal }); },
+    export(subsystem: RecordingModel, analyses: ModelAnalysis[], format: 'csv' | 'zip', signal?: AbortSignal) {
       if (!analyses.length || analyses.some(analysis => analysis.subsystem !== subsystem)) throw new Error('Run analysis for each recording before exporting.');
       if (new Set(analyses.map(analysis => analysis.source_name)).size !== analyses.length) throw new Error('Combined export requires unique filenames. Rename or remove duplicate recordings, then run analysis again.');
-      return download(`/api/${subsystem}/export`, format, subsystem, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_ids: analyses.map(analysis => analysis.job_id), format }) });
+      return download(`/api/${subsystem}/export`, format, subsystem, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_ids: analyses.map(analysis => analysis.job_id), format }), signal });
     },
   };
 }

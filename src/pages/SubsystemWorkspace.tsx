@@ -103,6 +103,7 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
   const importStarted = useRef(false);
   const pendingImports = useRef(new Set(importJobs?.map(job => job.subsystem)));
   const mounted = useRef(true);
+  const requests = useRef(new AbortController());
   const progressTimers = useRef<Partial<Record<Subsystem, ReturnType<typeof setTimeout>>>>({});
   const failedFiles = useRef<Partial<Record<Subsystem, File[]>>>({});
   const focusedResults = useRef(new Set<string>());
@@ -180,10 +181,11 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
   };
   // Both upload entry points pass the just-parsed recordings directly to the real backend.
   // Reading session.recordings here would use the render before the upload completed.
-  const analyseRecordings = async (targets: RecordingSummary[], target: Subsystem): Promise<string[]> => {
+  const analyseRecordings = async (targets: RecordingSummary[], target: Subsystem, signal: AbortSignal): Promise<string[]> => {
     const failures: string[] = [];
     setProgress(previous => ({ ...previous, [target]: { stage: 'analysing' } }));
     for (const item of targets) {
+      if (signal.aborted) break;
       const key = sourceKey(item);
       setBusy(previous => ({ ...previous, [key]: `Analysing ${item.source.fileName}…`, [target]: `Analysing ${item.source.fileName}…` }));
       setDoorJobs(previous => { const next = { ...previous }; delete next[key]; return next; });
@@ -193,23 +195,30 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
         const file = sourceFiles.current.get(key);
         if (!file) throw new Error('The original recording is unavailable. Upload it again before analysis.');
         if (target === 'door') {
-          const analysis = await doorClient.analyse(file);
+          const analysis = await doorClient.analyse(file, signal);
+          if (signal.aborted) break;
           const output = doorAnalysisResult(analysis, item);
           const firstAbnormal = output.segments.findIndex(segment => segment.prediction === 'Abnormal resistance');
           setDoorJobs(previous => ({ ...previous, [key]: analysis }));
           setDoorCycles(previous => ({ ...previous, [key]: Math.max(0, firstAbnormal) }));
           patchSession(target, previous => ({ ...previous, results: { ...previous.results, [key]: output } }));
         } else {
-          const analysis = await modelClient.analyse(target, file, item.rowCount, item.carIds);
+          const analysis = await modelClient.analyse(target, file, item.rowCount, item.carIds, signal);
+          if (signal.aborted) break;
           setModelJobs(previous => ({ ...previous, [key]: analysis }));
         }
       } catch (reason) {
+        if (signal.aborted) break;
         failures.push(`${item.source.fileName}: ${reason instanceof Error ? reason.message : 'Analysis failed. No prediction was generated.'}`);
-      } finally { clearBusy(key); }
+        const file = sourceFiles.current.get(key);
+        if (file) failedFiles.current[target]?.push(file);
+      } finally { if (!signal.aborted) clearBusy(key); }
     }
     return failures;
   };
   const addFiles = async (files: FileList | File[], target = subsystem) => {
+    const signal = requests.current.signal;
+    if (signal.aborted) return;
     if (pendingImports.current.has(target)) { setError('This subsystem is queued for analysis. Wait for its staged recordings to finish before uploading more files.', target); return; }
     if (operations.current.has(target)) { setError('This source session is processing. Wait for it to finish before uploading another recording.', target); return; }
     operations.current.add(target);
@@ -217,22 +226,32 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
     setProgress(previous => ({ ...previous, [target]: { stage: 'uploading' } }));
     const failures: string[] = [], loadedItems: RecordingSummary[] = [];
     let failedAt: 'uploading' | 'analysing' = 'analysing';
-    failedFiles.current[target] = Array.from(files);
+    failedFiles.current[target] = [];
     try {
       for (const file of Array.from(files)) {
+        if (signal.aborted) return;
         setBusy(previous => ({ ...previous, [target]: `Reading ${file.name}…` }));
         try {
-          const loaded = await workerRequest<RecordingSummary>({ type: 'load', subsystem: target, fileName: file.name, contents: await file.arrayBuffer(), datasetId: `ps3-${target}` });
+          const contents = await file.arrayBuffer();
+          if (signal.aborted) return;
+          const loaded = await workerRequest<RecordingSummary>({ type: 'load', subsystem: target, fileName: file.name, contents, datasetId: `ps3-${target}` });
+          if (signal.aborted) return;
           sourceFiles.current.set(sourceKey(loaded), file);
           loadedItems.push(loaded);
           patchSession(target, previous => ({ ...previous, recordings: [...previous.recordings.filter(item => sourceKey(item) !== sourceKey(loaded)), loaded], selectedId: sourceKey(loaded), cursor: 0, selection: initialSelection(target, loaded), metric: '', pins: [] }));
-        } catch (reason) { failures.push(`${file.name}: ${reason instanceof Error ? reason.message : 'Could not read recording.'}`); }
+        } catch (reason) {
+          if (signal.aborted) return;
+          failures.push(`${file.name}: ${reason instanceof Error ? reason.message : 'Could not read recording.'}`);
+          failedFiles.current[target]!.push(file);
+        }
       }
       if (failures.length) failedAt = 'uploading';
-      if (loadedItems.length) failures.push(...await analyseRecordings(loadedItems, target));
+      if (loadedItems.length) failures.push(...await analyseRecordings(loadedItems, target, signal));
     } finally {
-      finishOperation(target, failures, failedAt);
-      if (uploadInput.current) uploadInput.current.value = '';
+      if (!signal.aborted) {
+        finishOperation(target, failures, failedAt);
+        if (uploadInput.current) uploadInput.current.value = '';
+      }
     }
   };
   const runAnalysis = async (all = false) => {
@@ -242,13 +261,17 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
     if (!targets.length) return;
     operations.current.add(target);
     setError('', target);
-    delete failedFiles.current[target];
-    const failures = await analyseRecordings(targets, target);
-    finishOperation(target, failures);
+    failedFiles.current[target] = [];
+    const signal = requests.current.signal;
+    const failures = await analyseRecordings(targets, target, signal);
+    if (!signal.aborted) finishOperation(target, failures);
   };
   useEffect(() => {
     mounted.current = true;
-    if (!importStarted.current && importJobs?.length) {
+    if (requests.current.signal.aborted) requests.current = new AbortController();
+    // Wait for the mount to settle so Strict Mode's setup/cleanup check cannot cancel the initial import.
+    queueMicrotask(() => {
+      if (!mounted.current || importStarted.current || !importJobs?.length) return;
       importStarted.current = true;
       // Each job carries its own subsystem and files; changing tabs never cancels or redirects it.
       void (async () => {
@@ -258,9 +281,10 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
           await addFiles(job.files, job.subsystem);
         }
       })();
-    }
+    });
     return () => {
       mounted.current = false;
+      requests.current.abort();
       Object.values(progressTimers.current).forEach(clearTimeout);
     };
   }, []);
@@ -286,38 +310,52 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
   const cursorTo = (cursor: number) => { if (recording) patchSession(skey, { cursor: Math.max(0, Math.min(recording.rowCount - 1, cursor)) }); };
   const saveCsv = async () => {
     if (!hasResult || exporting) return;
+    const signal = requests.current.signal;
     setExporting(true); setError('');
     try {
-      if (modelJob) downloadFile(`${subsystem}_predictions.csv`, await modelClient.csv(modelJob), 'text/csv;charset=utf-8');
+      if (modelJob) {
+        const bytes = await modelClient.csv(modelJob, signal);
+        if (!signal.aborted) downloadFile(`${subsystem}_predictions.csv`, bytes, 'text/csv;charset=utf-8');
+      }
       else {
         if (!doorJob) throw new Error('Door analysis is unavailable. Run analysis again before downloading.');
-        downloadFile('door_predictions.csv', await doorClient.csv(doorJob.job_id), 'text/csv;charset=utf-8');
+        const bytes = await doorClient.csv(doorJob.job_id, signal);
+        if (!signal.aborted) downloadFile('door_predictions.csv', bytes, 'text/csv;charset=utf-8');
       }
-    } catch (reason) { setError((reason as Error).message); }
-    finally { setExporting(false); }
+    } catch (reason) { if (!signal.aborted) setError((reason as Error).message); }
+    finally { if (!signal.aborted) setExporting(false); }
   };
   const saveZip = async () => {
     if (exporting) return;
+    const signal = requests.current.signal;
     setExporting(true); setError('');
     try {
       if (subsystem !== 'door') {
         if (!allAnalysed) throw new Error('Run analysis for every loaded recording before exporting all results.');
-        downloadFile('predictions.zip', await modelClient.export(subsystem, allModelJobs, 'zip'), 'application/zip');
+        const bytes = await modelClient.export(subsystem, allModelJobs, 'zip', signal);
+        if (signal.aborted) return;
+        downloadFile('predictions.zip', bytes, 'application/zip');
         setNotice(`All ${config.short} predictions exported from the model backend.`);
       } else {
         if (!exportableDoorJob) throw new Error('Door analysis is unavailable. Run analysis again before exporting the ZIP.');
-        downloadFile('predictions.zip', await doorClient.zip(exportableDoorJob.job_id), 'application/zip');
+        const bytes = await doorClient.zip(exportableDoorJob.job_id, signal);
+        if (signal.aborted) return;
+        downloadFile('predictions.zip', bytes, 'application/zip');
         setNotice('Selected Door predictions exported from the model backend.');
       }
-    } catch (reason) { setError((reason as Error).message); }
-    finally { setExporting(false); }
+    } catch (reason) { if (!signal.aborted) setError((reason as Error).message); }
+    finally { if (!signal.aborted) setExporting(false); }
   };
   const saveAllCsv = async () => {
     if (subsystem === 'door' || !allAnalysed || exporting) return;
+    const signal = requests.current.signal;
     setExporting(true); setError('');
-    try { downloadFile(`${subsystem}_predictions.csv`, await modelClient.export(subsystem, allModelJobs, 'csv'), 'text/csv;charset=utf-8'); }
-    catch (reason) { setError((reason as Error).message); }
-    finally { setExporting(false); }
+    try {
+      const bytes = await modelClient.export(subsystem, allModelJobs, 'csv', signal);
+      if (!signal.aborted) downloadFile(`${subsystem}_predictions.csv`, bytes, 'text/csv;charset=utf-8');
+    }
+    catch (reason) { if (!signal.aborted) setError((reason as Error).message); }
+    finally { if (!signal.aborted) setExporting(false); }
   };
   const updateDoorCycle = (index: number) => {
     if (!result) return;
@@ -374,7 +412,7 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
   }, [recordingKey, doorJob?.job_id, modelJob?.job_id]);
   const visualization: SubsystemVisualState = {
     door: selectedReplayCycle ? { cycleNumber: selectedReplayCycle.index + 1, operation: selectedReplayCycle.operation, progress: replay.progress, completed: replay.completed, prediction: selectedReplayCycle.prediction } : undefined,
-    acv: modelJob?.subsystem === 'acv' ? { rankedCars: modelJob.prediction, hasUsableData: modelJob.evidence.cars.some(car => car.has_data) } : undefined,
+    acv: modelJob?.subsystem === 'acv' ? { rankedCars: modelJob.prediction, hasUsableData: modelJob.evidence.cars.some(car => car.has_data), usableCarIds: modelJob.evidence.cars.filter(car => car.has_data).map(car => car.car_id) } : undefined,
     rail: modelJob?.subsystem === 'rail' ? { prediction: modelJob.prediction } : undefined,
     shm: modelJob?.subsystem === 'shm' ? { prediction: modelJob.prediction } : undefined,
     stress: subsystem === 'shm' ? { progress: stress.progress, playing: stress.playing, amplitude: Math.min(1, Math.abs(stressValue ?? 0) / (stableSignal?.statistics.peak || 1)) } : undefined,
@@ -408,7 +446,7 @@ export default function SubsystemWorkspace({ visibleSubsystems, importJobs, onBa
               { label: 'Running model inference', done: info.stage === 'done', active: info.stage === 'analysing', failed: info.stage === 'error' && info.failedAt === 'analysing' },
             ].map(step => <li key={step.label} className={step.done ? 'done' : step.active ? 'active' : step.failed ? 'failed' : ''}><span className="step-icon">{step.done ? <Check size={12}/> : step.active ? <LoaderCircle size={12} className="spin"/> : step.failed ? <X size={12}/> : null}</span>{step.label}</li>)}</ol>
             {info.stage === 'queued' && <p>Waiting for the preceding subsystem to finish.</p>}
-            {info.stage === 'error' && <><p className="ms-progress-error">{info.message}</p><button className="ms-button small ms-progress-retry" disabled={Boolean(activeBusy)} onClick={() => { const files = failedFiles.current[subsystem]; if (files) void addFiles(files); else void runAnalysis(true); }}>Retry {config.short}</button></>}
+            {info.stage === 'error' && <><p className="ms-progress-error">{info.message}</p><button className="ms-button small ms-progress-retry" disabled={Boolean(activeBusy)} onClick={() => { const files = failedFiles.current[subsystem]; if (files?.length) void addFiles(files); else void runAnalysis(); }}>Retry {config.short}</button></>}
           </div></section>;
         })()}
         <section className="ms-source-panel" aria-label="Recording selection" onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={drop} data-dragging={dragging}>

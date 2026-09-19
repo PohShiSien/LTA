@@ -170,3 +170,18 @@ it('surfaces unavailable inference, invalid responses and expired exports withou
   await expect(client.analyse('shm', file, 1)).rejects.toThrow('invalid JSON');
   await expect(client.csv(analysis('shm'))).rejects.toThrow('CSV schema');
 });
+
+it('cancels model uploads and downloads without reporting a backend failure', async () => {
+  const cancelled = new DOMException('Request aborted', 'AbortError');
+  const controller = new AbortController();
+  const fetch = vi.fn().mockImplementation((_url, init: RequestInit) => new Promise((_resolve, reject) => {
+    init.signal!.addEventListener('abort', () => reject(cancelled), { once: true });
+  }));
+  vi.stubGlobal('fetch', fetch);
+  const client = createModelClient();
+  const file = new File(['1\n2\n3\n4'], 'Test1.csv');
+  const requests = [client.analyse('shm', file, 4, undefined, controller.signal), client.csv(analysis('shm'), controller.signal), client.export('shm', [analysis('shm')], 'zip', controller.signal)];
+  controller.abort();
+  for (const request of requests) await expect(request).rejects.toBe(cancelled);
+  expect(fetch.mock.calls.every(([, init]) => init.signal === controller.signal)).toBe(true);
+});

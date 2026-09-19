@@ -1,4 +1,5 @@
 import { strToU8, unzipSync, zipSync } from 'fflate';
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDoorClient, validateDoorAnalysis, type DoorAnalysis, type DoorCycleDetail } from '../src/lib/railwitnessDoorClient';
 import { doorAnalysisResult } from '../src/lib/doorBackendAnalysis';
@@ -48,8 +49,9 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('frozen Door backend client', () => {
   it('uploads the original file under multipart field file without overriding the browser boundary', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(analysis())); vi.stubGlobal('fetch', fetchMock);
     const file = new File(['original,source\r\n1,2\r\n'], 'Recording.csv', { type: 'text/csv' });
+    const response = { ...analysis(), source_sha256: createHash('sha256').update(new Uint8Array(await file.arrayBuffer())).digest('hex') };
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(response)).mockResolvedValueOnce(jsonResponse(analysis())); vi.stubGlobal('fetch', fetchMock);
     const controller = new AbortController();
     const result = await createDoorClient('http://127.0.0.1:8000/').analyse(file, controller.signal);
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -59,6 +61,7 @@ describe('frozen Door backend client', () => {
     expect([...body.keys()]).toEqual(['file']);
     expect(await (body.get('file') as File).text()).toBe(await file.text());
     expect(result.segments.map(cycle => cycle.prediction)).toEqual(['Normal', 'Abnormal resistance']);
+    await expect(createDoorClient().analyse(file)).rejects.toThrow('uploaded source content');
   });
 
   it('fetches selected cycle evidence and preserves already converted signals and references', async () => {

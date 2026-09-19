@@ -142,6 +142,10 @@ function IllustrativeDoor({ visualization, reducedMotion }: Pick<ReferenceTrainS
   </group>;
 }
 
+function acvCarHasData(acv: SubsystemVisualState['acv'], carId: string) {
+  return Boolean(acv && acv.hasUsableData !== false && (acv.usableCarIds ?? acv.rankedCars).includes(carId));
+}
+
 function AcvRankFace({ rank }: { rank: number }) {
   const suspected = rank === 1;
   return <div className={`reference-passenger-face ${suspected ? 'is-alert' : 'is-ok'}`} aria-hidden="true">
@@ -153,7 +157,7 @@ function AcvRankFace({ rank }: { rank: number }) {
   </div>;
 }
 
-function AcvCarriageInterior({ ordinal, carId, rank, reducedMotion }: { ordinal: number; carId: string; rank: number; reducedMotion: boolean }) {
+function AcvCarriageInterior({ ordinal, carId, rank, hasData, reducedMotion }: { ordinal: number; carId: string; rank: number; hasData: boolean; reducedMotion: boolean }) {
   const left = useRef<THREE.Group>(null);
   const right = useRef<THREE.Group>(null);
   const mountTime = useRef<number | null>(null);
@@ -165,6 +169,9 @@ function AcvCarriageInterior({ ordinal, carId, rank, reducedMotion }: { ordinal:
     if (left.current) left.current.position.x = -0.34 - slide;
     if (right.current) right.current.position.x = 0.34 + slide;
   });
+  if (!hasData) return <Html center position={[carCenterX(ordinal), 2.75, 2.29]} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+    <div className="reference-passenger-note" role="status"><strong>Car {carId} · Rank #{rank} of 8</strong>Insufficient thermal data; this rank does not indicate healthy equipment.</div>
+  </Html>;
   const suspected = rank === 1;
   const tint = suspected ? '#ff8585' : '#75dfac';
   return <group name={`AcvCarriageInterior_C${ordinal}`} position={[carCenterX(ordinal), 0, 1.34]} userData={{ illustrative: true, passengerData: false }}>
@@ -261,7 +268,7 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, xray, on
     if (++frames.current === 2) onReady();
     for (const [index, car] of model.cars.entries()) {
       const stress = subsystem === 'shm' && visualization?.stress;
-      const suspected = subsystem === 'acv' && visualization?.acv?.hasUsableData !== false && visualization?.acv?.rankedCars[0] === ids[index];
+      const suspected = subsystem === 'acv' && acvCarHasData(visualization?.acv, ids[index]) && visualization?.acv?.rankedCars[0] === ids[index];
       const intensity = suspected ? .22 : shmBand ? .32 + (stress && !reducedMotion ? unitProgress(stress.amplitude) * .18 : 0) : stress ? .1 + (reducedMotion ? 0 : unitProgress(stress.amplitude) * .42) : 0;
       car.traverse(object => {
         if (!(object instanceof THREE.Mesh) || object.userData.role !== 'shell') return;
@@ -279,7 +286,7 @@ function ReferenceGeometry({ ids, subsystem, selectedOrdinal, onSelect, xray, on
       if (subsystem === 'door' && ordinal !== REPRESENTATIVE_DOOR.carOrdinal) return null;
       const selected = selectedOrdinal === ordinal;
       const rank = subsystem === 'acv' ? (visualization?.acv?.rankedCars.indexOf(ids[index]) ?? -1) + 1 : 0;
-      const suspected = rank === 1 && visualization?.acv?.hasUsableData !== false;
+      const suspected = rank === 1 && acvCarHasData(visualization?.acv, ids[index]);
       return <group key={car.uuid}>
         <primitive object={car}
           onPointerOver={(event: ThreeEvent<PointerEvent>) => { event.stopPropagation(); setHoveredCar(ordinal); document.body.style.cursor = 'pointer'; }}
@@ -466,10 +473,13 @@ function ReferenceFallback({ ids, selectedOrdinal, ...props }: ReferenceTrainSce
     <div className="reference-fallback__cars">{ids.map((id,index) => {
       if (props.subsystem === 'door' && index + 1 !== REPRESENTATIVE_DOOR.carOrdinal) return null;
       const rank = props.subsystem === 'acv' ? (props.visualization?.acv?.rankedCars.indexOf(id) ?? -1) + 1 : 0;
-      const suspected = rank === 1 && props.visualization?.acv?.hasUsableData !== false;
+      const suspected = rank === 1 && acvCarHasData(props.visualization?.acv, id);
       return <button type="button" key={id} aria-label={props.subsystem === 'door' ? 'Representative door cabin' : `Focus car ${id}`} aria-pressed={selectedOrdinal === index+1} data-acv-rank={rank || undefined} data-shm-risk={shmBand?.id} title={rank ? `ACV rank ${rank}${suspected ? ' · most suspected' : ''}` : undefined} disabled={props.subsystem === 'shm' || props.subsystem === 'door'} className={`reference-fallback__car${suspected ? ' is-ranked-first' : ''}${selectedOrdinal === index+1 ? ' is-selected' : ''}`} onClick={()=>props.onSelect({kind:'car',carId:id,ordinal:index+1})}><span>{props.subsystem === 'door' || props.subsystem === 'shm' ? 'REFERENCE' : `CAR ${id}`}</span><i /><small>{rank ? `Rank ${rank}` : props.subsystem === 'shm' ? 'Unlocated' : 'Reference'}</small></button>;
     })}</div>
-    {props.subsystem === 'acv' && selectedOrdinal && props.visualization?.acv?.hasUsableData !== false && props.visualization?.acv?.rankedCars.includes(ids[selectedOrdinal - 1]) && <div className="reference-fallback__interior" aria-label="Illustrative ACV carriage interior"><AcvRankFace rank={props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal - 1]) + 1}/><div className="reference-passenger-note"><strong>Ranked #{props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal - 1]) + 1} of 8</strong>Relative model ranking: red = rank 1, green = ranks 2–8</div></div>}
+    {props.subsystem === 'acv' && selectedOrdinal && props.visualization?.acv?.rankedCars.includes(ids[selectedOrdinal - 1]) && <div className="reference-fallback__interior" aria-label="Illustrative ACV carriage interior">
+      {acvCarHasData(props.visualization.acv, ids[selectedOrdinal - 1]) && <AcvRankFace rank={props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal - 1]) + 1}/>}
+      <div className="reference-passenger-note"><strong>Car {ids[selectedOrdinal - 1]} · Ranked #{props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal - 1]) + 1} of 8</strong>{acvCarHasData(props.visualization.acv, ids[selectedOrdinal - 1]) ? 'Relative model ranking: red = rank 1, green = ranks 2–8' : 'Insufficient thermal data; this rank does not indicate healthy equipment.'}</div>
+    </div>}
     {props.subsystem === 'door' && door && <div className={`reference-fallback__door${completedDoorAbnormal(door) ? ' is-abnormal' : ''}`} aria-label={`Illustrative ${door.operation} movement, cycle ${door.cycleNumber}`} style={{ '--door-opening': `${opening * 37}px` } as CSSProperties}>
       <div className="reference-fallback__door-frame"><i /><i /></div><span>Cycle {door.cycleNumber} · {door.operation}<small>{door.completed ? `Classified as ${door.prediction}` : 'Recorded movement in progress'}</small></span>
     </div>}
@@ -493,7 +503,7 @@ export function ReferenceTrainScene(props: ReferenceTrainSceneProps) {
   const mappedContext = props.subsystem==='acv'||props.subsystem==='rail';
   const door = props.visualization?.door;
   const acvFirst = props.subsystem === 'acv' ? props.visualization?.acv?.rankedCars[0] : undefined;
-  const acvSuspected = acvFirst && props.visualization?.acv?.hasUsableData !== false;
+  const acvSuspected = acvFirst && acvCarHasData(props.visualization?.acv, acvFirst);
   const railPrediction = props.subsystem === 'rail' ? props.visualization?.rail?.prediction : undefined;
   const railAbnormal = railPrediction === 'Side I' || railPrediction === 'Side II';
   const shmPrediction = props.subsystem === 'shm' ? props.visualization?.shm?.prediction : undefined;
@@ -512,7 +522,7 @@ export function ReferenceTrainScene(props: ReferenceTrainSceneProps) {
           <ReferenceRails subsystem={props.subsystem} selection={props.selection} onSelect={props.onSelect} visualization={props.visualization}/>
           <ReferenceGeometry ids={ids} subsystem={props.subsystem} selectedOrdinal={selectedOrdinal} onSelect={props.onSelect} xray={props.xray} visualization={props.visualization} reducedMotion={props.reducedMotion} onReady={()=>setReady(true)}/>
           {props.subsystem==='rail'&&<AxleBoxLayer xray={props.xray} selectedOrdinal={selectedOrdinal} selection={props.selection} onSelect={props.onSelect} source={source} cursorLabel={props.cursorLabel} sensorReadout={props.sensorReadout}/>}
-          {props.subsystem==='acv'&&selectedOrdinal&&props.visualization?.acv?.hasUsableData !== false&&props.visualization?.acv?.rankedCars.includes(ids[selectedOrdinal-1])&&<AcvCarriageInterior key={selectedOrdinal} ordinal={selectedOrdinal} carId={ids[selectedOrdinal-1]} rank={props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal-1])+1} reducedMotion={props.reducedMotion}/>}
+          {props.subsystem==='acv'&&selectedOrdinal&&props.visualization?.acv?.rankedCars.includes(ids[selectedOrdinal-1])&&<AcvCarriageInterior key={selectedOrdinal} ordinal={selectedOrdinal} carId={ids[selectedOrdinal-1]} rank={props.visualization.acv.rankedCars.indexOf(ids[selectedOrdinal-1])+1} hasData={acvCarHasData(props.visualization.acv, ids[selectedOrdinal-1])} reducedMotion={props.reducedMotion}/>}
           {props.subsystem==='shm'&&props.xray&&<StructuralInternals/>}
           {props.subsystem==='door'&&<IllustrativeDoor visualization={props.visualization} reducedMotion={props.reducedMotion} />}
           <ReferenceCamera subsystem={props.subsystem} selection={props.selection} ids={ids} fitKey={props.fitKey} reducedMotion={props.reducedMotion} visualization={props.visualization}/>

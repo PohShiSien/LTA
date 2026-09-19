@@ -29,6 +29,7 @@ ROOT=Path(__file__).resolve().parent
 # environment-variable path overrides must never change production inference.
 MODEL_PATH=ROOT/'door/door_model.joblib'
 MAX_UPLOAD=25*1024*1024
+MAX_ACV_UPLOAD=50*1024*1024
 MAX_JOBS=6
 MAX_RECORDING_JOBS=200
 JOB_TTL_SECONDS=3600
@@ -218,9 +219,10 @@ def upload_recording(subsystem: RecordingSubsystem, file: UploadFile = File(...)
     extensions = ('.csv', '.xlsx') if subsystem == 'acv' else ('.csv',)
     if not filename.lower().endswith(extensions):
         raise HTTPException(422, f'Upload a raw {subsystem.upper()} {" or ".join(extensions)} recording, not a model, ZIP, or prediction table.')
-    raw = file.file.read(MAX_UPLOAD + 1)
-    if len(raw) > MAX_UPLOAD:
-        raise HTTPException(413, 'File exceeds the 25 MiB limit.')
+    limit = MAX_ACV_UPLOAD if subsystem == 'acv' else MAX_UPLOAD
+    raw = file.file.read(limit + 1)
+    if len(raw) > limit:
+        raise HTTPException(413, f'File exceeds the {limit // (1024 * 1024)} MiB limit.')
     with inference_lock, threadpool_limits(limits=1):
         module, bundle, model_id = recording_model(subsystem)
         try:

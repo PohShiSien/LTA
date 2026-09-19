@@ -101,6 +101,90 @@ test('Home queue runs all four real models while tabs change, with scoped progre
   await expect(page.getByRole('button', { name: 'Analyse selected systems' })).toBeDisabled();
 });
 
+for (const first of ['door', 'shm'] as const) {
+  test(`returning Home cancels active ${first} analysis and the remaining recording and subsystem queue`, async ({ page }) => {
+    const submitted: string[] = [];
+    page.on('request', request => { const match = request.url().match(/\/api\/(door|rail|shm)\/predict$/); if (match) submitted.push(match[1]); });
+    let release!: () => void;
+    const held = new Promise<void>(resolveHeld => { release = resolveHeld; });
+    let started!: () => void;
+    const firstStarted = new Promise<void>(resolveStarted => { started = resolveStarted; });
+    await page.route(`**/api/${first}/predict`, async route => {
+      const response = await route.fetch();
+      started();
+      await held;
+      await route.fulfill({ response });
+    });
+    await page.goto('/');
+    const buffer = readFileSync(resolve(fixtures, first === 'door' ? 'door-controller.csv' : 'shm-stress.csv'));
+    await page.getByLabel('Browse files', { exact: true }).setInputFiles([
+      ...['first.csv', 'second.csv'].map(name => ({ name, mimeType: 'text/csv', buffer })),
+      railUpload,
+    ]);
+    await expect(page.getByRole('button', { name: 'Analyse selected systems' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Analyse selected systems' }).click();
+    await firstStarted;
+    const cancelled = page.waitForEvent('requestfailed', request => request.url() === `${api}/api/${first}/predict`);
+    await page.getByRole('button', { name: 'Back to uploads' }).click();
+    release();
+    await cancelled;
+    await expect(page.getByRole('region', { name: 'Uploaded files' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Analyse selected systems' })).toBeDisabled();
+    await page.unroute(`**/api/${first}/predict`);
+    // A fresh import can finish without any recordings from the abandoned queue resurfacing.
+    await page.getByLabel('Browse files', { exact: true }).setInputFiles(railUpload);
+    await expect(page.getByRole('button', { name: 'Analyse selected systems' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Analyse selected systems' }).click();
+    await analyse(page);
+    expect(submitted).toEqual([first, 'rail']);
+    await expect(page.getByRole('combobox', { name: 'Selected recording' }).locator('option')).toHaveCount(2);
+  });
+}
+
+test('retry only resubmits failed recordings and preserves other successful results', async ({ page }) => {
+  const submitted: string[] = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url() === `${api}/api/shm/predict`) submitted.push(request.url());
+  });
+  const upload = integratedModels.find(item => item.subsystem === 'shm')!.upload;
+  await page.goto('/#shm');
+  await page.getByLabel('Upload recording files').setInputFiles(['first.csv', 'second.csv'].map(name => ({ ...upload, name })));
+  await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeEnabled();
+  await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: 'first.csv' });
+  await page.route('**/api/shm/predict', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Temporary failure.' }) }), { times: 1 });
+  await page.getByRole('button', { name: 'Run again', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Temporary failure');
+  await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: 'second.csv' });
+  await page.getByRole('button', { name: 'Retry Structural health', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeEnabled();
+  expect(submitted).toHaveLength(4);
+  // The same retry scope applies when one file in an automatic upload batch fails.
+  await page.route('**/api/shm/predict', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Temporary upload failure.' }) }), { times: 1 });
+  await page.getByLabel('Upload recording files').setInputFiles(['third.csv', 'fourth.csv'].map(name => ({ ...upload, name })));
+  await expect(page.getByRole('alert')).toContainText('Temporary upload failure');
+  await page.getByRole('button', { name: 'Retry Structural health', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeEnabled();
+  expect(submitted).toHaveLength(7);
+});
+
+test('ACV cars without usable thermal evidence remain neutral alongside ranked cars', async ({ page }) => {
+  await page.goto('/#acv');
+  const buffer = Buffer.from([
+    ['Time', ...acvIds.flatMap(car => [`Car ${car} - Indoor Average Temperature`, `Car ${car} - Control Temperature (Cooling)`])].join(','),
+    ...Array.from({ length: 121 }, (_, index) => [new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(), ...acvIds.flatMap(car => [car === '08' ? '' : car === '03' ? 28 : 23, 22])].join(',')),
+  ].join('\n'));
+  await page.getByLabel('Upload recording files').setInputFiles({ name: 'partly-observed.csv', mimeType: 'text/csv', buffer });
+  await analyse(page);
+  await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-acv-first-car', '03');
+  await page.getByRole('button', { name: 'Select car 08', exact: true }).click();
+  await expect(page.locator('.reference-train-scene')).toContainText('Insufficient thermal data');
+  await expect(page.locator('.reference-passenger-face')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Select car 01', exact: true }).click();
+  await expect(page.locator('.reference-passenger-face.is-ok')).toBeVisible();
+  await page.getByRole('button', { name: 'Select car 03', exact: true }).click();
+  await expect(page.locator('.reference-passenger-face.is-alert')).toBeVisible();
+});
+
 test('SHM train highlight and side legend follow each model output and preserve values above one', async ({ page }) => {
   await page.goto('/#shm');
   const scene = page.locator('.reference-train-scene');

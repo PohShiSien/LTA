@@ -131,6 +131,24 @@ describe('rendered subsystem train schematic', () => {
     expect(html).not.toContain('reference-passenger-face');
   });
 
+  it('keeps an individual ACV car with missing telemetry neutral while preserving its returned rank', () => {
+    const rankedCars = ['03', '01', '02', '04', '05', '06', '07', '08'];
+    const acv = { rankedCars, hasUsableData: true, usableCarIds: rankedCars.slice(0, 7) };
+    const missing = render('acv', { selection: { kind: 'car', carId: '08', ordinal: 8 }, visualization: { acv } });
+    expect(missing).toContain('Car 08 · Ranked #8 of 8');
+    expect(missing).toContain('Insufficient thermal data; this rank does not indicate healthy equipment.');
+    expect(missing).not.toContain('reference-passenger-face');
+    expect(missing).toContain('data-acv-first-car="03"');
+    const cars = buttons(missing).filter(button => button.attributes.includes('reference-fallback__car'));
+    expect(cars).toHaveLength(8);
+    expect(cars.find(car => car.attributes.includes('aria-label="Focus car 08"'))!.attributes).toContain('data-acv-rank="8"');
+    for (const [carId, face] of [['03', 'is-alert'], ['01', 'is-ok']]) {
+      const available = render('acv', { selection: { kind: 'car', carId, ordinal: Number(carId) }, visualization: { acv } });
+      expect(available).toContain(`reference-passenger-face ${face}`);
+      expect(available).not.toContain('Insufficient thermal data;');
+    }
+  });
+
   it('keeps SHM stress unlocated and disables the pulse under reduced motion', () => {
     const html = render('shm', {
       selection: { kind: 'car', carId: '03', ordinal: 3 },
