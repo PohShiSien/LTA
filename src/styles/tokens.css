@@ -1,0 +1,102 @@
+/**
+ * JagaRail design tokens — dark engineering theme.
+ * Single source of truth for colour, type, spacing, radius, shadow and motion.
+ * See docs/BRANDING.md for usage guidance. Do not hardcode these values elsewhere.
+ */
+:root {
+  color-scheme: dark;
+
+  /* ---- Surfaces ---- */
+  --bg-main: #0F1720;
+  --bg-card: #17212B;
+  --bg-elevated: #1D2935;
+  --bg-sunken: #121A22;
+  --brand-dark: #0B1220;
+  --brand-dark-soft: #16202C;
+  --brand-dark-elevated: #202D3B;
+
+  /* ---- Text ---- */
+  --text-primary: #F3F4F6;
+  --text-secondary: #C7CDD4;
+  --text-muted: #8B96A3;
+  --text-on-dark: #F3F4F6;
+  --text-on-dark-muted: #9AA5B1;
+
+  /* ---- Status ---- */
+  --status-healthy: #20A4A9;
+  --status-healthy-strong: #6FE0E3;
+  --status-healthy-tint: rgba(32, 164, 169, .16);
+  --status-warning: #D08A2E;
+  --status-warning-strong: #F0AE5C;
+  --status-warning-tint: rgba(208, 138, 46, .16);
+  --status-critical: #D64545;
+  --status-critical-strong: #FF8484;
+  --status-critical-tint: rgba(214, 69, 69, .16);
+  --status-neutral: #8B96A3;
+  --status-neutral-strong: #C7CDD4;
+  --status-neutral-tint: rgba(139, 150, 163, .14);
+
+  /* ---- Borders / states ---- */
+  --border-subtle: #212E3A;
+  --border-default: #2A3B4C;
+  --border-strong: #3C526A;
+  --border-on-dark: rgba(243, 244, 246, .12);
+  --surface-hover: rgba(243, 244, 246, .05);
+  --surface-selected: rgba(32, 164, 169, .16);
+  --focus-ring: #3FC6CC;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .32);
+  --shadow-elevated: 0 10px 40px rgba(0, 0, 0, .55);
+  --shadow-none: none;
+
+  /* ---- Typography ---- */
+  --font-heading: 'Lato', 'Segoe UI', -apple-system, sans-serif;
+  --font-body: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* One step smaller than the previous scale, still comfortably above the old ~8-11px UI. */
+  --text-display: clamp(2rem, 1.7rem + 1.2vw, 2.5rem);        /* 32-40px main title */
+  --text-page-title: clamp(1.625rem, 1.4rem + .8vw, 2rem);     /* 26-32px subsystem title */
+  --text-section: clamp(1.3125rem, 1.22rem + .35vw, 1.5rem);   /* 21-24px section heading */
+  --text-card-heading: 1.1875rem;                               /* ~19px card heading */
+  --text-body-lg: 1rem;                                         /* 16px primary body */
+  --text-nav: 0.9375rem;                                        /* 15px sidebar nav */
+  --text-control: 0.9375rem;                                    /* 15px buttons/inputs */
+  --text-chart: 0.9375rem;                                      /* 15px chart ticks/legends */
+  --text-meta: 0.875rem;                                        /* 14px secondary metadata */
+  --text-small: 0.8125rem;                                      /* 13px floor for meaningful text */
+  --text-numeric-lg: clamp(2rem, 1.7rem + .9vw, 2.625rem);      /* 32-42px primary numeric result */
+
+  --line-tight: 1.25;
+  --line-normal: 1.55;
+  --line-relaxed: 1.8;
+
+  /* ---- Spacing scale ---- */
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 1.75rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* ---- Radius ---- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* ---- Motion ---- */
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 420ms;
+  --motion-camera: 900ms;
+  --ease-standard: cubic-bezier(.3, 0, .2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; --motion-camera: 0ms; }
+}

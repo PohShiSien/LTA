@@ -28,7 +28,11 @@ JOB_TTL_SECONDS=3600
 
 app=FastAPI(title='RailWitness Door API',version='1.0.0',description='Offline completed-cycle analysis. Read-only and advisory.')
 origins=os.environ.get('RAILWITNESS_CORS_ORIGINS','http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000').split(',')
+# Vite auto-increments its port (5174, 5175, ...) whenever the default is already taken, e.g. by another
+# dev server instance. Matching localhost/127.0.0.1 on any port keeps the frontend working regardless of
+# which port it actually lands on, in addition to the explicit list above.
 app.add_middleware(CORSMiddleware,allow_origins=[x.strip() for x in origins if x.strip()],
+                   allow_origin_regex=r'^https?://(localhost|127\.0\.0\.1)(:\d+)?$',
                    allow_credentials=False,allow_methods=['GET','POST'],allow_headers=['Content-Type'])
 
 @dataclass

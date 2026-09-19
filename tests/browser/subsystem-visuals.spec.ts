@@ -7,6 +7,10 @@ async function analyse(page: Page) {
   await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
 }
+// Uploading a recording now triggers analysis automatically; only wait for it to land.
+async function analysed(page: Page) {
+  await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
+}
 async function demo(page: Page, subsystem: string) {
   await page.goto(`/#${subsystem}`);
   await page.getByRole('button', { name: 'Synthetic demo', exact: true }).click();
@@ -36,7 +40,7 @@ test('Door timeline preserves all cycles, keyboard selection, inferred direction
 test('Door replay conceals completed-cycle output, pauses and resumes the same movement', async ({ page }) => {
   await page.goto('/#door');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'door-controller.csv'));
-  await analyse(page);
+  await analysed(page);
   await expect(page.locator('.door-evidence-classification')).toContainText(/Normal|Abnormal resistance/);
   await page.clock.install({ time: new Date('2026-09-18T12:00:00Z') });
   await page.clock.pauseAt(new Date('2026-09-18T12:00:01Z'));
@@ -83,7 +87,7 @@ test('Door replay advances chronologically and cancels when the source mode chan
 test('ACV ranks every exact source car, emphasizes rank one and connects selection to recorded peer evidence', async ({ page }) => {
   await page.goto('/#acv');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'acv-basic.xlsx'));
-  await analyse(page);
+  await analysed(page);
   const cards = page.getByRole('region', { name: 'ACV car ranking' });
   await expect(cards.getByRole('button')).toHaveCount(8);
   const labels = await cards.getByRole('button').evaluateAll(elements => elements.map(element => element.getAttribute('aria-label')));
@@ -118,7 +122,7 @@ test('Rail links the recording side to odd/even sensor groups and keeps a text-l
 test('SHM retains exact damage, replays samples without assigning a component, and responds to reduced motion', async ({ page }) => {
   await page.goto('/#shm');
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'test99.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
-  await analyse(page);
+  await analysed(page);
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-selected-car', '');
   await expect(page.locator('.reference-train-scene')).toContainText('physical sensor location unavailable');
   await expect(page.locator('.multi-shell')).toHaveAttribute('data-reduced-motion', 'true');

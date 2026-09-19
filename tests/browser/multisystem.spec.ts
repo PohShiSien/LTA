@@ -17,6 +17,11 @@ async function analyse(page: Page) {
   await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
   await expect(resultPanel(page).locator('.ms-kind.predicted')).toHaveText('Predicted');
 }
+// Uploading a recording now triggers analysis automatically; only wait for it to land.
+async function analysed(page: Page) {
+  await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
+  await expect(resultPanel(page).locator('.ms-kind.predicted')).toHaveText('Predicted');
+}
 async function csvDownload(page: Page) {
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'CSV', exact: true }).click();
@@ -40,7 +45,7 @@ test('uploaded Rail uses exact channels, keeps one recording class while scrubbi
   await channel.locator('summary').click();
   await expect(channel).toContainText('42 (index 41)');
   await expect(channel).toContainText('m/s²');
-  await analyse(page);
+  await analysed(page);
   const classBefore = await resultPanel(page).getByRole('heading', { level: 2 }).textContent();
   await page.getByRole('slider', { name: 'Recording sample cursor', exact: true }).focus();
   await page.keyboard.press('End');
@@ -66,7 +71,7 @@ test('actual ACV XLSX preserves all eight source IDs, the chosen cross-car metri
   await expect(page.getByRole('combobox', { name: 'Metric' }).locator('option:checked')).toHaveText('03 · Outdoor Average Temperature');
   await expect(page.locator('.ms-pinned-fields')).toContainText('Car 01 - Outdoor Average Temperature');
   await expect(page.locator('.ms-car-comparison').getByRole('button')).toHaveCount(8);
-  await analyse(page);
+  await analysed(page);
   const ranking = await page.locator('.ms-ranking li strong').allTextContents();
   expect([...ranking].sort()).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
   expect(await page.getByRole('navigation', { name: 'Carriage navigator' }).locator('button strong').allTextContents()).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
@@ -97,7 +102,7 @@ test('Door controller remains unlocated, preserves raw conversions, and exports 
   await expect(current).toContainText('121 · mA');
   await expect(current).toContainText('0.121 · A');
   await expect(current).toContainText('Raw × 0.001');
-  await analyse(page);
+  await analysed(page);
   await expect(resultPanel(page).getByRole('heading', { level: 2 })).toHaveText('1 door cycles classified');
   const download = await csvDownload(page);
   expect(download.name).toBe('door_predictions.csv');
@@ -114,7 +119,7 @@ test('SHM produces one unlocated numeric result and isolates same-named files ac
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'Test.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
   await expect(inspector(page).getByRole('heading', { name: 'Measurement location not supplied' })).toBeVisible();
   await expect(page.locator('.ms-unmapped')).toContainText('not assigned to any car or bogie');
-  await analyse(page);
+  await analysed(page);
   await expect(resultPanel(page).getByRole('heading', { level: 2 })).toHaveText('Predicted cumulative fatigue damage');
   const damage = await page.locator('.ms-damage').getAttribute('title');
   expect(Number.isFinite(Number(damage))).toBe(true);
@@ -124,20 +129,23 @@ test('SHM produces one unlocated numeric result and isolates same-named files ac
   await expect(resultPanel(page)).toContainText('Choose a recording to begin');
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'Test.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'door-controller.csv')) });
   await expect(page.locator('.ms-source-context')).toContainText('ps3-door / Test.csv');
-  await expect(resultPanel(page)).toContainText('Recording ready for analysis');
+  // Same filename, independent subsystem: this Door upload auto-analyses on its own and never
+  // inherits the SHM tab's fatigue-damage result for the same "Test.csv" name.
+  await analysed(page);
+  await expect(resultPanel(page)).toContainText('door cycles classified');
   await expect(page.locator('.ms-damage')).toHaveCount(0);
   await navigate(page, 'Structural health');
   await expect(page.locator('.ms-source-context')).toContainText('ps3-shm / Test.csv');
   await expect(page.locator('.ms-damage')).toHaveAttribute('title', damage!);
 });
 
-test('ZIP exports only analysed uploaded subsystems, even while synthetic demo mode is active', async ({ page }) => {
+test('ZIP exports only uploaded-mode subsystems, excluding synthetic demo results', async ({ page }) => {
   await page.goto('/#shm');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'shm-stress.csv'));
-  await analyse(page);
+  await analysed(page);
   await navigate(page, 'ACV');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'acv-basic.xlsx'));
-  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeEnabled();
+  await analysed(page);
   await navigate(page, 'Rail corrugation');
   await page.getByRole('button', { name: 'Synthetic demo', exact: true }).click();
   await expect(page.locator('.ms-mode-chip')).toHaveText('SYNTHETIC DEMO');
@@ -150,7 +158,7 @@ test('ZIP exports only analysed uploaded subsystems, even while synthetic demo m
   const archive = await pending;
   expect(archive.suggestedFilename()).toBe('predictions.zip');
   const files = unzipSync(new Uint8Array(readFileSync((await archive.path())!)));
-  expect(Object.keys(files)).toEqual(['shm_predictions.csv']);
+  expect(Object.keys(files).sort()).toEqual(['acv_predictions.csv', 'shm_predictions.csv']);
   expect(strFromU8(files['shm_predictions.csv'])).toMatch(/^file_id,prediction\r\nshm-stress.csv,/);
   await page.getByRole('button', { name: 'Uploaded sources', exact: true }).click();
   await expect(resultPanel(page)).toContainText('Choose a recording to begin');
@@ -164,7 +172,7 @@ test('multiple randomly numbered SHM files rehydrate after cache eviction and ex
   await expect(page.getByRole('button', { name: 'Analyse all 4', exact: true })).toBeEnabled();
   await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: 'test16.csv' });
   await expect(page.locator('.ms-time-control')).toContainText('Sample 1 · acquisition time not supplied');
-  await analyse(page);
+  await analysed(page);
   await page.getByRole('button', { name: 'Analyse all 4', exact: true }).click();
   await expect(page.getByRole('button', { name: /predictions.zip/ }).locator('.ms-count')).toHaveText('4');
   await expect(page.getByRole('button', { name: 'Analyse all 4', exact: true })).toBeEnabled();
@@ -190,7 +198,7 @@ test('rejects malformed Rail and recovers from duplicate export names by removin
 
   await navigate(page, 'Structural health');
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'Test.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
-  await analyse(page);
+  await analysed(page);
   const originalCsv = (await csvDownload(page)).text;
   const originalKey = await page.getByRole('combobox', { name: 'Selected recording' }).inputValue();
 
@@ -198,10 +206,10 @@ test('rejects malformed Rail and recovers from duplicate export names by removin
   const namedOptions = page.getByRole('combobox', { name: 'Selected recording' }).locator('option', { hasText: /^Test\.csv(?: · source [0-9a-f]{8})?$/ });
   await expect(namedOptions).toHaveCount(2);
   expect(new Set(await namedOptions.allTextContents()).size).toBe(2);
-  await expect(resultPanel(page)).toContainText('Recording ready for analysis');
   const changedKey = await page.getByRole('combobox', { name: 'Selected recording' }).inputValue();
   expect(changedKey).not.toBe(originalKey);
-  await analyse(page);
+  // Uploading now analyses this new recording automatically; just wait for it to land.
+  await analysed(page);
   await expect(page.getByRole('button', { name: /predictions.zip/ }).locator('.ms-count')).toHaveText('2');
   await page.getByRole('button', { name: /predictions.zip/ }).click();
   await expect(page.getByRole('alert')).toContainText('Duplicate output identity Test.csv');
@@ -248,7 +256,7 @@ test('full supplied rich ACV workbook uploads all 483 columns and runs its fitte
   await page.goto('/#acv');
   await page.getByLabel('Upload recording files').setInputFiles(path);
   await expect(page.locator('.ms-source-context')).toContainText('22,262 rows · 483 source fields', { timeout: 90000 });
-  await analyse(page);
+  await analysed(page);
   expect([...await page.locator('.ms-ranking li strong').allTextContents()].sort()).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
   await page.getByRole('checkbox', { name: 'All recording fields' }).check();
   await page.getByRole('textbox', { name: 'Search source fields' }).fill('Grounding Detection');

@@ -1,0 +1,12 @@
+.tour-overlay { position: fixed; inset: 0; z-index: 500; pointer-events: none; }
+.tour-spotlight { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(26, 46, 64, .68); pointer-events: none; transition: top var(--motion-base) var(--ease-standard), left var(--motion-base) var(--ease-standard), width var(--motion-base) var(--ease-standard), height var(--motion-base) var(--ease-standard); }
+.tour-panel { position: fixed; width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-elevated); padding: 20px 22px; pointer-events: auto; z-index: 501; }
+.tour-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tour-step-count { font: 700 11px var(--font-body); letter-spacing: 1px; text-transform: uppercase; color: var(--status-healthy-strong); }
+.tour-panel header button { color: var(--text-muted); }
+.tour-panel h2 { font-family: var(--font-heading); font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.tour-panel p { font-size: var(--text-meta); line-height: var(--line-relaxed); color: var(--text-secondary); margin-bottom: 18px; }
+.tour-panel footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tour-nav { display: flex; gap: 8px; }
+
+@media (prefers-reduced-motion: reduce) { .tour-spotlight { transition: none; } }

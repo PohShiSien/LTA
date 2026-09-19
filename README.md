@@ -22,6 +22,8 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 
 Use `python3.13` in place of `python3` if needed. On this workspace, the environment is already installed, so activating `backend/door/.venv` is sufficient. Its source interpreter is `.tools/python/cpython-3.13.5-macos-aarch64-none/bin/python3.13`.
 
+**Windows on ARM64 note:** a `python.org` ARM64 build of Python resolves `scipy`/`scikit-learn` to `win_arm64` wheels, whose native `.pyd`/`.dll` files can be blocked outright by an organisation's Windows Application Control (WDAC) policy (`ImportError: DLL load failed ... An Application Control policy has blocked this file`), even though `pip install` itself succeeds. If that happens, install the **x64** Python build instead (it runs fine under Windows' built-in x64 emulation) and create the venv with that interpreter — the resulting `win_amd64` wheels are unaffected: `winget install --id Python.Python.3.13 -e --architecture x64`, then `python -m venv .venv` using that interpreter's `python.exe`.
+
 Start the frontend in another terminal, from the repository root:
 
 ```sh

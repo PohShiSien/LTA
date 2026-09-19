@@ -14,9 +14,9 @@ const upload = { name: 'integration-cycles.csv', mimeType: 'text/csv', buffer: s
 const result = (page: Page) => page.getByRole('region', { name: 'Prediction result' });
 async function analyseDoor(page: Page): Promise<DoorAnalysis> {
   await page.goto('/#door');
-  await page.getByLabel('Upload recording files').setInputFiles(upload);
+  // Uploading now triggers analysis automatically, so the listener must be armed before the upload settles.
   const response = page.waitForResponse(response => response.url() === `${api}/api/door/predict` && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
+  await page.getByLabel('Upload recording files').setInputFiles(upload);
   const returned = await response;
   expect(returned.ok()).toBe(true);
   const analysis: DoorAnalysis = await returned.json();
@@ -52,7 +52,6 @@ test('Door upload uses frozen API, displays every cycle, and exports exact backe
   expect(readFileSync((await csv.path())!)).toEqual(expectedCsv);
   await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: 'Structural health', exact: true }).click();
   await page.getByLabel('Upload recording files').setInputFiles(resolve('tests/fixtures/recordings/shm-stress.csv'));
-  await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Run again', exact: true })).toBeEnabled();
   const archivePending = page.waitForEvent('download');
   await page.getByRole('button', { name: /predictions.zip/ }).click();
@@ -121,9 +120,8 @@ test('full supplied Door Test matches the frozen acceptance predictions and cove
   const path = process.env.RAILWITNESS_DOOR_TEST_CSV;
   test.skip(!path || !existsSync(path), 'Set RAILWITNESS_DOOR_TEST_CSV to the supplied Test(1).csv or its byte-identical Test.csv.');
   await page.goto('/#door');
-  await page.getByLabel('Upload recording files').setInputFiles(path!);
   const pending = page.waitForResponse(response => response.url() === `${api}/api/door/predict`);
-  await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
+  await page.getByLabel('Upload recording files').setInputFiles(path!);
   const analysis: DoorAnalysis = await (await pending).json();
   expect(analysis.summary).toMatchObject({ rows: 6253, cycles: 38, normal: 30, abnormal_resistance: 8 });
   let next = 0;
@@ -149,7 +147,6 @@ test('dragging a second upload cannot unlock or overwrite an in-flight Door anal
   });
   await page.goto('/#door');
   await page.getByLabel('Upload recording files').setInputFiles(upload);
-  await page.getByRole('button', { name: 'Run analysis', exact: true }).click();
   await started;
   const transfer = await page.evaluateHandle(contents => {
     const data = new DataTransfer(); data.items.add(new File([contents], 'second.csv', { type: 'text/csv' })); return data;

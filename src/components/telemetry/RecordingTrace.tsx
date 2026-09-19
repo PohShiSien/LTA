@@ -11,7 +11,7 @@ interface Props {
   onCursor: (index: number) => void;
   spectrum?: boolean;
 }
-const WIDTH = 800, HEIGHT = 225, LEFT = 53, RIGHT = 16, TOP = 18, BOTTOM = 191;
+const WIDTH = 860, HEIGHT = 320, LEFT = 82, RIGHT = 24, TOP = 24, BOTTOM = 256;
 export function RecordingTrace({ signal, cursor, rowCount, sampleRateHz, unit, label, onCursor, spectrum = false }: Props) {
   const id = useId();
   const spectral = spectrum ? signal.spectrum : undefined;
