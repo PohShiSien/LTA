@@ -225,7 +225,6 @@ def predict_sensor_table(sensor_df, bundle):
     return out.reset_index(drop=True)
 
 # ---------------------------------------------------------------------------------------------
-rp = sys.modules[__name__]        # the code above plays the role of the rail_pipeline module
 # ---------------------------------------------------------------------------------------------
 
 warnings.filterwarnings("ignore")
@@ -235,11 +234,11 @@ VALID_LABELS = {"Normal", "Side I", "Side II"}
 
 
 def predict_folder(input_dir, bundle, n_jobs=-1):
-    files = rp.sorted_csvs(input_dir)
+    files = sorted_csvs(input_dir)
     if not files:
         raise SystemExit(f"No .csv files found in {input_dir}")
-    sensor = rp.extract_folder(input_dir, n_jobs=n_jobs)
-    pred = rp.predict_sensor_table(sensor, bundle)
+    sensor = extract_folder(input_dir, n_jobs=n_jobs)
+    pred = predict_sensor_table(sensor, bundle)
     # keep the folder's natural file order (Test1, Test2, ..., Test10)
     order = {os.path.basename(f): i for i, f in enumerate(files)}
     return pred.sort_values("file_id", key=lambda s: s.map(order)).reset_index(drop=True)
@@ -277,7 +276,7 @@ def main():
     print(f"model: {bundle.get('model_name')} | {len(bundle['feature_cols'])} features | baseline: {bundle.get('baseline_kind')} "
           f"| Side I weight: {bundle.get('class_scale', [1, 1, 1])[1]} | trained {bundle.get('created', '?')}")
 
-    files = rp.sorted_csvs(input_dir)
+    files = sorted_csvs(input_dir)
     print(f"predicting {len(files)} files from {input_dir} ...")
     pred = predict_folder(input_dir, bundle, n_jobs=a.n_jobs)
     validate(pred, files)
