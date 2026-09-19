@@ -222,6 +222,11 @@ export async function parseRecording(fileName: string, contents: string | ArrayB
     headers = rawTable[0].map(value => String(value ?? ''));
     data = rawTable.slice(1);
   }
+  if (subsystem === 'acv') {
+    const nonempty = data.filter(row => row.some(value => value !== null && String(value).trim() !== ''));
+    if (nonempty.length !== data.length) warnings.push(`${data.length - nonempty.length} empty rows excluded from the recorded sample count.`);
+    data = nonempty;
+  }
   if (!data.length) throw new Error('The file has a header but no recorded samples.');
   if (headers.some(header => !header.trim()) || new Set(headers.map(normalHeader)).size !== headers.length) throw new Error('Source headers must be nonempty and unique; no columns were shifted or discarded.');
   const identityColumns = new Set(headers.flatMap((header, index) => /^(car model|car type|car number|door number|train number|datetime|time|timestamp)$/i.test(header.trim()) ? [index] : []));

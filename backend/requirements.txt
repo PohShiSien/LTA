@@ -1,6 +1,7 @@
 # Tested with Python 3.13.5. Keep these versions when loading the bundled model.
 numpy==2.3.5
 pandas==2.3.3
+python-calamine==0.8.2
 pyarrow==25.0.1
 scipy==1.17.0
 scikit-learn==1.8.0

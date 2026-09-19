@@ -1,10 +1,11 @@
-"""Upload/export checks against the supplied Rail and SHM artifacts; no training."""
+"""Upload/export checks against the supplied recording artifacts; no training."""
 import hashlib
 import io
 from pathlib import Path
 import sys
 import zipfile
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -33,6 +34,18 @@ def client():
 def rail_csv():
     lines = (FIXTURES / 'rail-first-samples.csv').read_bytes().splitlines()
     return b'\n'.join([lines[0]] + [lines[1 + i % (len(lines) - 1)] for i in range(10000)]) + b'\n'
+
+
+@pytest.fixture
+def acv_frame():
+    frame = pd.DataFrame({'Time': pd.date_range('2026-01-01', periods=241, freq='30s')})
+    for car in range(1, 9):
+        prefix = f'Car {car:02d} - '
+        frame[prefix + 'Indoor Temperature'] = 28.0 if car == 1 else 25.0
+        frame[prefix + 'Control Temperature (Cooling)'] = 24.0
+        frame[prefix + 'ACV Running Mode'] = 'Cooling'
+        frame[prefix + 'Setting Mode'] = 'Centralized'
+    return frame
 
 
 def analyse(client, subsystem, raw=SHM, name='sample.csv'):
@@ -173,3 +186,102 @@ def test_upload_extension_and_size_checked_before_model(client, monkeypatch):
     response = client.post('/api/rail/predict', files={'file': ('test.csv', b'abc', 'text/csv')})
     assert response.status_code == 413
     assert not api.recording_jobs
+
+
+def test_acv_ranked_result_evidence_and_exports_match_script(client, acv_frame, tmp_path):
+    paths = [ROOT / 'backend/acv/acv_model.joblib', ROOT / 'backend/acv/acv_predictions.csv']
+    before = [hashlib.sha256(path.read_bytes()).hexdigest() for path in paths]
+    raw = acv_frame.to_csv(index=False).encode()
+    result = analyse(client, 'acv', raw, 'case.csv')
+    module, bundle, _ = api.recording_model('acv')
+    source = tmp_path / 'case.csv'
+    source.write_bytes(raw)
+    order, scored = module.predict_file(source, bundle)
+    assert result['prediction'] == order == [f'{i:02d}' for i in range(1, 9)]
+    assert result['summary'] == {'rows': 241}
+    assert result['source_sha256'] == hashlib.sha256(raw).hexdigest()
+    assert result['model_id'] == before[0]
+    assert result['model_name'] == 'acv-leak-evidence-fusion'
+    assert result['evidence']['analysed_rows'] == 241
+    assert result['evidence']['dropped_timestamp_rows'] == result['evidence']['duplicate_timestamp_rows'] == 0
+    for rank, car in enumerate(result['evidence']['cars'], 1):
+        expected = scored.loc[car['car_id']]
+        assert car['rank'] == rank
+        assert car['probability'] == expected['probability']
+        assert car['thermal_deficit_degC'] == expected['TD']
+        assert car['valid_minutes'] == expected['valid_minutes']
+        assert car['intervention_minutes'] == 0
+        assert car['compressor_start_ratio'] is None
+    assert 'exactly one' in result['warnings'][0]
+    csv = client.get(result['downloads']['csv']).content
+    assert csv == b'file_id,ranked_cars\ncase.csv,01|02|03|04|05|06|07|08\n'
+    with zipfile.ZipFile(io.BytesIO(client.get(result['downloads']['zip']).content)) as archive:
+        assert archive.namelist() == ['acv_predictions.csv']
+        assert archive.read('acv_predictions.csv') == csv
+    second = analyse(client, 'acv', raw, 'case2.csv')
+    combined = client.post('/api/acv/export', json={'job_ids': [second['job_id'], result['job_id']], 'format': 'csv'})
+    assert combined.content == b'file_id,ranked_cars\ncase2.csv,01|02|03|04|05|06|07|08\ncase.csv,01|02|03|04|05|06|07|08\n'
+    assert client.get(f'/api/shm/jobs/{result["job_id"]}/predictions.csv').status_code == 404
+    assert [hashlib.sha256(path.read_bytes()).hexdigest() for path in paths] == before
+
+
+def test_acv_cleans_times_and_reports_insufficient_optional_telemetry(client, acv_frame):
+    acv_frame['Car 08 - Indoor Temperature'] = 0
+    acv_frame = acv_frame.drop(columns=[c for c in acv_frame if c.endswith('Setting Mode')])
+    raw = acv_frame.to_csv(index=False).encode()
+    duplicate = raw.splitlines()[1]
+    invalid = b'invalid,' + duplicate.split(b',', 1)[1]
+    raw += duplicate + b'\n' + invalid + b'\n' + b',' * (len(acv_frame.columns)-1) + b'\n'
+    result = analyse(client, 'acv', raw)
+    assert result['summary']['rows'] == 243
+    evidence = result['evidence']
+    assert evidence['analysed_rows'] == 241
+    assert evidence['dropped_timestamp_rows'] == evidence['duplicate_timestamp_rows'] == 1
+    assert result['prediction'][-1] == '08'
+    assert evidence['cars'][-1]['has_data'] is False
+    assert evidence['cars'][-1]['thermal_deficit_degC'] is None
+    assert all(car['intervention_minutes'] is None for car in evidence['cars'])
+    assert any('Timestamp cleanup' in warning for warning in result['warnings'])
+    assert any('ranked last' in warning for warning in result['warnings'])
+
+
+def test_acv_reports_script_cooling_filter_fallback(client, acv_frame):
+    for column in acv_frame:
+        if column.endswith('ACV Running Mode'):
+            acv_frame[column] = 'Ventilation'
+    result = analyse(client, 'acv', acv_frame.to_csv(index=False).encode())
+    assert any('without cooling-mode and demand filters' in warning for warning in result['warnings'])
+
+
+@pytest.mark.parametrize('change,detail', [
+    ('short', 'usable thermal minutes'), ('cars', 'eight distinct two-digit car IDs'),
+    ('timestamps', 'distinct valid timestamps'), ('columns', 'set-point columns'),
+])
+def test_acv_rejects_unusable_recordings_without_inventing_ranking(client, acv_frame, change, detail):
+    if change == 'short':
+        acv_frame = acv_frame.iloc[:3]
+    elif change == 'cars':
+        acv_frame = acv_frame.drop(columns=[c for c in acv_frame if c.startswith('Car 08')])
+    elif change == 'timestamps':
+        acv_frame['Time'] = 'invalid'
+    else:
+        acv_frame = acv_frame.drop(columns=[c for c in acv_frame if 'Control Temperature' in c])
+    response = client.post('/api/acv/predict', files={'file': ('case.csv', acv_frame.to_csv(index=False).encode(), 'text/csv')})
+    assert response.status_code == 422, response.text
+    assert detail in response.json()['detail']
+    assert not api.recording_jobs
+
+
+def test_acv_invalid_workbook_and_prediction_table_are_actionable(client):
+    for name, raw in [('bad.xlsx', b'not a workbook'), ('predictions.csv', b'file_id,ranked_cars\ncase.xlsx,01|02\n')]:
+        response = client.post('/api/acv/predict', files={'file': (name, raw, 'application/octet-stream')})
+        assert response.status_code == 422, response.text
+        assert not api.recording_jobs
+
+
+def test_acv_preserves_source_car_ids_without_renumbering(client, acv_frame):
+    acv_frame = acv_frame.rename(columns=lambda name: name.replace('Car 0', 'Car 1'))
+    result = analyse(client, 'acv', acv_frame.to_csv(index=False).encode())
+    assert result['prediction'] == [str(i) for i in range(11, 19)]
+    assert [car['car_id'] for car in result['evidence']['cars']] == result['prediction']
+    assert client.get(result['downloads']['csv']).content == b'file_id,ranked_cars\nsample.csv,11|12|13|14|15|16|17|18\n'

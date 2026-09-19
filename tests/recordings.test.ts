@@ -90,6 +90,14 @@ describe('actual Rail measurement registry', () => {
 });
 
 describe('actual ACV OOXML cases', () => {
+  it('excludes entirely empty ACV rows consistently with the model reader without discarding partial records', async () => {
+    const headers = ['Time', ...Array.from({ length: 8 }, (_, index) => `Car ${String(index + 1).padStart(2, '0')} - Indoor Temperature`)];
+    const rows = [Array(9).fill(' ').join(','), ['2026-01-01', 22, 23, 24, 25, 26, 27, 28, 29].join(','), Array(9).fill('').join(','), ['', 30, '', '', '', '', '', '', ''].join(',')];
+    const recording = await parseRecording('case.csv', `${headers.join(',')}\n${rows.join('\n')}`, 'acv');
+    expect(recording.rows).toHaveLength(2);
+    expect(recording.rows[1][1]).toBe(30);
+    expect(recording.warnings).toContain('2 empty rows excluded from the recorded sample count.');
+  });
   it('reads basic source headers and text flags, leading-zero IDs and Excel time without DOM', async () => {
     const recording = await parseRecording('acv_test_case.xlsx', fixtureBinary('acv-basic.xlsx'), 'acv');
     expect(recording.rows).toHaveLength(2);

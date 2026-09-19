@@ -11,6 +11,7 @@ import importlib
 import io
 import os
 import sys
+import tempfile
 import time
 import uuid
 import zipfile
@@ -64,7 +65,7 @@ def get_job(job_id: str) -> Job:
 
 @app.get('/',include_in_schema=False)
 def index():
-    return {'service':'RailWitness Door API','frontend':'http://127.0.0.1:5173','docs':'/docs'}
+    return {'service':'RailWitness Model API','frontend':'http://127.0.0.1:5173','docs':'/docs'}
 
 @app.get('/api/health')
 def health():return {'status':'ok','mode':'local_advisory','model_file_present':MODEL_PATH.is_file()}
@@ -134,12 +135,12 @@ def download_zip(job_id:str):
 
 # These jobs retain a single prediction per recording, not the uploaded sensor arrays.
 recording_jobs: dict[str, tuple[float, dict, bytes]] = {}
-RecordingSubsystem = Literal['rail', 'shm']
+RecordingSubsystem = Literal['rail', 'shm', 'acv']
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=3)
 def recording_model(subsystem: RecordingSubsystem):
-    folder, script = ('rail_corrugation', 'Predict') if subsystem == 'rail' else ('shm', 'predict')
+    folder, script = ('rail_corrugation', 'Predict') if subsystem == 'rail' else (subsystem, 'predict')
     path = ROOT / folder / f'{subsystem}_model.joblib'
     try:
         module = importlib.import_module(f'{folder}.{script}')
@@ -151,7 +152,7 @@ def recording_model(subsystem: RecordingSubsystem):
                     or not hasattr(bundle['model'], 'predict_proba')):
                 raise ValueError('Unsupported Rail model schema.')
             bundle['baseline']  # Required saved preprocessing, never fitted from uploads.
-        else:
+        elif subsystem == 'shm':
             bundle = module.load_bundle(path)
             linear = bundle['linear_model']
             for key in ('mean', 'scale', 'coefficients'):
@@ -161,6 +162,8 @@ def recording_model(subsystem: RecordingSubsystem):
                 raise ValueError('Invalid SHM model scale.')
             for key in ('samples_per_file', 'range_moment_5_min', 'range_moment_5_max'):
                 bundle['training'][key]
+        else:
+            bundle = module.load_bundle(path)
         model_id = hashlib.sha256(path.read_bytes()).hexdigest()
     except Exception as exc:
         raise HTTPException(503, f'{subsystem.upper()} model unavailable: {exc}. Restore the supplied model/script and install backend/requirements.txt.') from exc
@@ -170,9 +173,10 @@ def recording_model(subsystem: RecordingSubsystem):
 def recording_csv(results: list[dict]) -> bytes:
     out = io.StringIO()
     writer = csv.writer(out, lineterminator='\n')
-    writer.writerow(['file_id', 'prediction'])
+    is_acv = results[0]['subsystem'] == 'acv'
+    writer.writerow(['file_id', 'ranked_cars' if is_acv else 'prediction'])
     for result in results:
-        writer.writerow([result['source_name'], result['prediction']])
+        writer.writerow([result['source_name'], '|'.join(result['prediction']) if is_acv else result['prediction']])
     return out.getvalue().encode('utf-8')
 
 
@@ -210,8 +214,9 @@ def recording_download(subsystem: RecordingSubsystem, blob: bytes, format: Liter
 @app.post('/api/{subsystem}/predict')
 def upload_recording(subsystem: RecordingSubsystem, file: UploadFile = File(...)):
     filename = Path((file.filename or 'uploaded.csv').replace('\\', '/')).name
-    if not filename.lower().endswith('.csv'):
-        raise HTTPException(422, f'Upload a raw {subsystem.upper()} .csv recording, not a model, ZIP, or prediction table.')
+    extensions = ('.csv', '.xlsx') if subsystem == 'acv' else ('.csv',)
+    if not filename.lower().endswith(extensions):
+        raise HTTPException(422, f'Upload a raw {subsystem.upper()} {" or ".join(extensions)} recording, not a model, ZIP, or prediction table.')
     raw = file.file.read(MAX_UPLOAD + 1)
     if len(raw) > MAX_UPLOAD:
         raise HTTPException(413, 'File exceeds the 25 MiB limit.')
@@ -234,7 +239,7 @@ def upload_recording(subsystem: RecordingSubsystem, file: UploadFile = File(...)
                     if speed < module.MOVING_KMH:
                         warnings.append('Estimated speed is below 5 km/h; the speed correction uses its 5 km/h lower bound.')
                     rows = len(frame)
-                else:
+                elif subsystem == 'shm':
                     values, warnings = module.load_series(raw)
                     predicted = module.predict_values(bundle, values, warnings)
                     prediction = float(predicted['prediction'])
@@ -243,13 +248,40 @@ def upload_recording(subsystem: RecordingSubsystem, file: UploadFile = File(...)
                     evidence = {key: predicted[key] for key in ('cycles', 'residual_reversals', 'range_moment_5', 'class_width')}
                     warnings = predicted['warnings']
                     rows = len(values)
+                else:
+                    metadata = {}
+                    # The supplied workbook reader needs a path; close and remove it after inference.
+                    with tempfile.NamedTemporaryFile(suffix=Path(filename).suffix) as source:
+                        source.write(raw)
+                        source.flush()
+                        prediction, scored = module.predict_file(source.name, bundle, metadata=metadata)
+                    if len(prediction) != 8 or len(set(prediction)) != 8 or set(prediction) != set(scored.index):
+                        raise ValueError('ACV model returned an invalid car ranking.')
+                    cars = []
+                    for car_id in prediction:
+                        car = scored.loc[car_id]
+                        optional_number = lambda key: None if np.isnan(car[key]) else float(car[key])
+                        cars.append({'car_id': car_id, 'rank': int(car['rank']), 'probability': float(car['probability']),
+                                     'thermal_deficit_degC': optional_number('TD'), 'valid_minutes': float(car['valid_minutes']),
+                                     'has_data': bool(car['has_data']), 'intervention_minutes': optional_number('I_minutes'),
+                                     'intervention_level': str(car['I_level']), 'compressor_start_ratio': optional_number('start_ratio')})
+                    evidence = {'cars': cars, **{key: metadata[key] for key in ('analysed_rows', 'dropped_timestamp_rows', 'duplicate_timestamp_rows')}}
+                    rows = metadata['rows']
+                    warnings = ['This model assumes exactly one refrigerant leak per case. Its scores rank cars relative to this recording; they do not establish whether a leak is present.']
+                    if metadata.get('relaxed_cooling_filter'):
+                        warnings.append('Too few cars had sufficient cooling-mode data. The supplied script used its fallback without cooling-mode and demand filters.')
+                    missing = [car['car_id'] for car in cars if not car['has_data']]
+                    if missing:
+                        warnings.append(f'Cars {", ".join(missing)} lack sufficient usable thermal data and are ranked last; this does not indicate healthy equipment.')
+                    if metadata['dropped_timestamp_rows'] or metadata['duplicate_timestamp_rows']:
+                        warnings.append(f'Timestamp cleanup excluded {metadata["dropped_timestamp_rows"]} invalid rows and {metadata["duplicate_timestamp_rows"]} duplicate rows. Evidence uses {metadata["analysed_rows"]} rows.')
         except (ValueError, UnicodeError, FloatingPointError, OverflowError) as exc:
             raise HTTPException(422, f'{subsystem.upper()} recording could not be analysed: {exc}') from exc
         except (KeyError, TypeError, AttributeError) as exc:
             raise HTTPException(503, f'{subsystem.upper()} model and prediction script are incompatible. Restore the matching supplied files.') from exc
     job_id = uuid.uuid4().hex
     base = f'/api/{subsystem}/jobs/{job_id}'
-    result = {'subsystem': subsystem, 'job_id': job_id, 'model_name': bundle.get('model_name', subsystem),
+    result = {'subsystem': subsystem, 'job_id': job_id, 'model_name': bundle.get('model_name', bundle.get('model', subsystem)) if subsystem == 'acv' else bundle.get('model_name', subsystem),
               'model_id': model_id, 'source_name': filename, 'source_sha256': hashlib.sha256(raw).hexdigest(),
               'summary': {'rows': rows}, 'prediction': prediction, 'warnings': warnings, 'evidence': evidence,
               'downloads': {'csv': base + '/predictions.csv', 'zip': base + '/predictions.zip'}}

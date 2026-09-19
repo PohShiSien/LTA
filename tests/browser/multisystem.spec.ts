@@ -7,12 +7,19 @@ const fixtures = resolve('tests/fixtures/recordings');
 const railLines = readFileSync(resolve(fixtures, 'rail-first-samples.csv'), 'utf8').trim().split(/\r?\n/);
 const railCsv = Buffer.from([railLines[0], ...Array.from({ length: 10000 }, (_, index) => railLines[1 + index % (railLines.length - 1)])].join('\n'));
 const railUpload = { name: 'rail-recording.csv', mimeType: 'text/csv', buffer: railCsv };
+// Sufficient-duration telemetry exercises upload behavior; it is not an accuracy benchmark.
+const acvIds = Array.from({ length: 8 }, (_, index) => String(index + 1).padStart(2, '0'));
+const acvCsv = Buffer.from([
+  ['Time', ...acvIds.flatMap(car => [`Car ${car} - Indoor Average Temperature`, `Car ${car} - Control Temperature (Cooling)`])].join(','),
+  ...Array.from({ length: 121 }, (_, index) => [new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(), ...acvIds.flatMap(car => [car === '03' ? 28 : 23, 22])].join(',')),
+].join('\n'));
 const api = process.env.VITE_API_URL || process.env.VITE_DOOR_API_URL || 'http://127.0.0.1:8000';
 const integratedModels = [
+  { subsystem: 'acv', upload: { name: 'acv-case.csv', mimeType: 'text/csv', buffer: acvCsv }, rows: 121 },
   { subsystem: 'rail', upload: railUpload, rows: 10000 },
   { subsystem: 'shm', upload: { name: 'shm-stress.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) }, rows: 4 },
 ] as const;
-type RecordingAnalysis = { job_id: string; source_name: string; prediction: string | number; summary: { rows: number }; downloads: { csv: string } };
+type RecordingAnalysis = { job_id: string; source_name: string; prediction: string | number | string[]; summary: { rows: number }; downloads: { csv: string } };
 const resultPanel = (page: Page) => page.getByRole('region', { name: 'Prediction result' });
 const inspector = (page: Page) => page.getByRole('region', { name: 'Evidence inspector' });
 async function navigate(page: Page, label: string) { await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: label, exact: true }).click(); }
@@ -29,13 +36,6 @@ async function csvDownload(page: Page) {
   const download = await pending;
   return { name: download.suggestedFilename(), text: readFileSync((await download.path())!, 'utf8') };
 }
-async function expectPendingModel(page: Page) {
-  await expect(page.locator('.ms-model-availability')).toContainText('model integration pending');
-  await expect(resultPanel(page)).toContainText('Waiting for trained model package');
-  await expect(resultPanel(page).locator('.ms-kind')).toHaveText('Not analysed');
-  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'CSV', exact: true })).toBeDisabled();
-}
 async function expectReady(page: Page) {
   await expect(resultPanel(page)).toContainText('Recording ready for analysis');
   await expect(resultPanel(page).locator('.ms-kind')).toHaveText('Not analysed');
@@ -45,8 +45,51 @@ async function expectReady(page: Page) {
 
 test.beforeEach(async ({ page }) => { await page.emulateMedia({ reducedMotion: 'reduce' }); });
 
+test('SHM train highlight and side legend follow each model output and preserve values above one', async ({ page }) => {
+  await page.goto('/#shm');
+  const scene = page.locator('.reference-train-scene');
+  const legend = scene.locator('[aria-label="SHM risk legend"]');
+  const cases = [{ band: 'green', amplitude: 50 }, { band: 'yellow', amplitude: 80 }, { band: 'red', amplitude: 100 }];
+  await page.getByLabel('Upload recording files').setInputFiles(cases.map(({ band, amplitude }) => ({ name: `${band}.csv`, mimeType: 'text/csv', buffer: Buffer.from([0, 0, amplitude, 0, amplitude, 0, amplitude, 0, amplitude, 0].join('\n')) })));
+  await expectReady(page);
+  await expect(scene).toHaveAttribute('data-shm-risk', 'uncomputed');
+  await expect(legend.locator('[aria-current=true]')).toHaveCount(0);
+  const responses: Promise<RecordingAnalysis>[] = [];
+  page.on('response', response => { if (response.url() === `${api}/api/shm/predict`) responses.push(response.json()); });
+  await page.getByRole('button', { name: 'Analyse all 3', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeEnabled();
+  const analyses = await Promise.all(responses);
+  expect(analyses).toHaveLength(3);
+  for (const { band } of cases) {
+    const output = analyses.find(analysis => analysis.source_name === `${band}.csv`)!;
+    await page.getByRole('combobox', { name: 'Selected recording' }).selectOption({ label: output.source_name });
+    await expect(scene).toHaveAttribute('data-shm-risk', band);
+    await expect(resultPanel(page).getByRole('heading', { level: 2 })).toHaveText(`Fatigue damage: ${output.prediction}`);
+    await expect(legend.locator('[data-band]')).toHaveCount(3);
+    await expect(legend.locator('[aria-current=true]')).toHaveAttribute('data-band', band);
+    await expect(resultPanel(page).locator('[data-band]')).toHaveCount(0);
+    await expect(legend).toContainText(String(output.prediction));
+    const csv = await csvDownload(page);
+    expect(csv.text.trim().split('\n')[1]).toBe(`${output.source_name},${output.prediction}`);
+  }
+  await expect(legend).toContainText('Above');
+  const desktopStage = await scene.locator('.reference-train-stage').boundingBox();
+  const desktopLegend = await legend.boundingBox();
+  expect(desktopLegend!.x).toBeGreaterThanOrEqual(desktopStage!.x + desktopStage!.width - 1);
+  await page.setViewportSize({ width: 430, height: 932 });
+  await expect(legend).toBeVisible();
+  const mobileStage = await scene.locator('.reference-train-stage').boundingBox();
+  const mobileLegend = await legend.boundingBox();
+  expect(mobileLegend!.y).toBeGreaterThanOrEqual(mobileStage!.y + mobileStage!.height - 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await page.getByLabel('Upload recording files').setInputFiles({ name: 'not-analysed.csv', mimeType: 'text/csv', buffer: Buffer.from('1\n2\n3\n4') });
+  await expectReady(page);
+  await expect(scene).toHaveAttribute('data-shm-risk', 'uncomputed');
+  await expect(legend.locator('[aria-current=true]')).toHaveCount(0);
+});
+
 for (const { subsystem, upload, rows } of integratedModels) {
-  const title = (prediction: string | number) => subsystem === 'rail' ? `Rail classification: ${prediction}` : `Fatigue damage: ${prediction}`;
+  const title = (prediction: RecordingAnalysis['prediction']) => subsystem === 'acv' ? `ACV inspection priority: Car ${(prediction as string[])[0]}` : subsystem === 'rail' ? `Rail classification: ${prediction}` : `Fatigue damage: ${prediction}`;
 
   test(`${subsystem} upload runs the supplied model, exports exact backend results, and clears failed reruns`, async ({ page, request }) => {
     await page.goto(`/#${subsystem}`);
@@ -67,10 +110,18 @@ for (const { subsystem, upload, rows } of integratedModels) {
       await expect(page.locator('.reference-rail-key .is-predicted')).toHaveCount(analysis.prediction === 'Normal' ? 0 : 1);
       if (analysis.prediction !== 'Normal') await expect(page.locator('.reference-rail-key .is-predicted')).toContainText(String(analysis.prediction));
       await expect(inspector(page).getByRole('group', { name: 'Selected signal measurements' })).toContainText('RMS · mean removed');
-    } else {
+    } else if (subsystem === 'shm') {
       await expect(resultPanel(page).locator('.ms-model-summary')).not.toContainText('fifth range moment');
       await expect(inspector(page).getByRole('group', { name: 'Selected signal measurements' })).toContainText('Stress range');
       await expect(page.getByRole('button', { name: 'Play stress replay' })).toBeHidden();
+    } else {
+      expect(Array.isArray(analysis.prediction)).toBe(true);
+      await expect(resultPanel(page).locator('.ms-acv-ranking tbody tr')).toHaveCount(8);
+      for (const [index, car] of (analysis.prediction as string[]).entries()) {
+        await expect(resultPanel(page).locator('.ms-acv-ranking tbody tr').nth(index)).toContainText(`Car ${car}`);
+      }
+      await expect(resultPanel(page)).toContainText('one');
+      await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-acv-first-car', (analysis.prediction as string[])[0]);
     }
     const expectedCsv = await (await request.get(`${api}${analysis.downloads.csv}`)).body();
     const csv = await csvDownload(page);
@@ -92,11 +143,14 @@ for (const { subsystem, upload, rows } of integratedModels) {
     await expect(resultPanel(page).getByRole('heading', { name: title(analysis.prediction), exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
     if (subsystem === 'rail') await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-rail-class', 'uncomputed');
+    if (subsystem === 'shm') await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-shm-risk', 'uncomputed');
+    if (subsystem === 'acv') await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-acv-first-car', '');
   });
 
   test(`${subsystem} Analyse all preserves each recording result and downloads one combined CSV`, async ({ page, request }) => {
     await page.goto(`/#${subsystem}`);
-    const names = ['first.csv', 'second.csv'];
+    const extension = upload.name.split('.').at(-1)!;
+    const names = [`first.${extension}`, `second.${extension}`];
     await page.getByLabel('Upload recording files').setInputFiles(names.map(name => ({ ...upload, name })));
     await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeDisabled();
     const responses: Promise<RecordingAnalysis>[] = [];
@@ -122,7 +176,7 @@ for (const { subsystem, upload, rows } of integratedModels) {
     const lines = bytes.toString('utf8').trim().split(/\r?\n/);
     expect(lines).toHaveLength(3);
     expect(lines.slice(1).map(line => line.split(',')[0]).sort()).toEqual(names);
-    await page.getByLabel('Upload recording files').setInputFiles({ ...upload, name: 'not-analysed.csv' });
+    await page.getByLabel('Upload recording files').setInputFiles({ ...upload, name: `not-analysed.${extension}` });
     await expect(page.getByRole('button', { name: 'All results CSV', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
   });
@@ -171,7 +225,7 @@ test('actual ACV XLSX preserves all eight source IDs, the chosen cross-car metri
   await expect(page.getByRole('combobox', { name: 'Metric' }).locator('option:checked')).toHaveText('03 · Outdoor Average Temperature');
   await expect(page.locator('.ms-pinned-fields')).toContainText('Car 01 - Outdoor Average Temperature');
   await expect(page.locator('.ms-car-comparison').getByRole('button')).toHaveCount(8);
-  await expectPendingModel(page);
+  await expectReady(page);
   await expect(page.locator('.ms-ranking')).toHaveCount(0);
   expect(await page.getByRole('navigation', { name: 'Carriage navigator' }).locator('button strong').allTextContents()).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
 });
@@ -243,7 +297,7 @@ test('Door ZIP retains exact analysed output while other recordings have not bee
   const doorCsv = await csvDownload(page);
   await navigate(page, 'ACV');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'acv-basic.xlsx'));
-  await expectPendingModel(page);
+  await expectReady(page);
   await navigate(page, 'Structural health');
   await page.getByLabel('Upload recording files').setInputFiles(resolve(fixtures, 'shm-stress.csv'));
   await expectReady(page);
@@ -336,7 +390,7 @@ test('keyboard-accessible schematic retains recorded component inspection withou
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-selected-car', '');
 });
 
-test('full supplied rich ACV workbook preserves all 483 columns for inspection while its model is pending', async ({ page }) => {
+test('full supplied rich ACV workbook preserves all 483 columns before analysis', async ({ page }) => {
   const source = process.env.RAILWITNESS_DATA_ROOT ?? '/Users/bytedance/Downloads/NebulaX-Hackathon-ProblemStatement-main/PS3/02_Datasets';
   const path = resolve(source, 'ACV/Train/acv_case_04.xlsx');
   test.skip(process.env.RAILWITNESS_HEAVY_XLSX !== '1' || !existsSync(path), 'Optional full-data smoke: set RAILWITNESS_HEAVY_XLSX=1 and RAILWITNESS_DATA_ROOT if needed.');
@@ -344,9 +398,32 @@ test('full supplied rich ACV workbook preserves all 483 columns for inspection w
   await page.goto('/#acv');
   await page.getByLabel('Upload recording files').setInputFiles(path);
   await expect(page.locator('.ms-source-context')).toContainText('22,262 rows · 483 source fields', { timeout: 90000 });
-  await expectPendingModel(page);
+  await expectReady(page);
   expect(await page.getByRole('navigation', { name: 'Carriage navigator' }).locator('button strong').allTextContents()).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
   await page.getByRole('checkbox', { name: 'All recording fields' }).check();
   await page.getByRole('textbox', { name: 'Search source fields' }).fill('Grounding Detection');
   await expect(page.locator('.ms-field')).toHaveCount(8);
+});
+
+test('supplied ACV test workbook matches the saved ranking, exact download, and source-car selection', async ({ page }) => {
+  const source = process.env.RAILWITNESS_DATA_ROOT ?? '/Users/bytedance/Downloads/NebulaX-Hackathon-ProblemStatement-main/PS3/02_Datasets';
+  const path = resolve(source, 'ACV/Test/acv_test_case.xlsx');
+  test.skip(!existsSync(path), 'Set RAILWITNESS_DATA_ROOT to run the supplied ACV workbook check.');
+  test.setTimeout(120000);
+  const expected = readFileSync(resolve('backend/acv/acv_predictions.csv'), 'utf8');
+  const ranking = expected.trim().split(/\r?\n/)[1].split(',')[1].split('|');
+  await page.goto('/#acv');
+  await page.getByLabel('Upload recording files').setInputFiles(path);
+  await expect(page.locator('.ms-source-context')).toContainText('9,082 rows', { timeout: 90000 });
+  await analyse(page);
+  await expect(resultPanel(page).getByRole('heading', { level: 2 })).toHaveText(`ACV inspection priority: Car ${ranking[0]}`);
+  for (const [index, car] of ranking.entries()) await expect(resultPanel(page).locator('.ms-acv-ranking tbody tr').nth(index)).toContainText(`Car ${car}`);
+  await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-acv-first-car', ranking[0]);
+  expect((await csvDownload(page)).text).toBe(expected);
+  await resultPanel(page).getByRole('button', { name: `Inspect Car ${ranking[1]}`, exact: true }).click();
+  await expect(inspector(page).getByRole('heading', { name: `Car ${ranking[1]}`, exact: true })).toBeVisible();
+  expect(await page.getByRole('navigation', { name: 'Carriage navigator' }).locator('button strong').allTextContents()).toEqual(acvIds);
+  await page.setViewportSize({ width: 430, height: 932 });
+  await expect(resultPanel(page).getByRole('heading', { level: 2 })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });

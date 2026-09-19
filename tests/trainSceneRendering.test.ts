@@ -86,7 +86,44 @@ describe('rendered subsystem train schematic', () => {
     expect(cars).toHaveLength(8);
     expect(cars.map(car => /aria-label="Focus car ([^"]+)"/.exec(car.attributes)![1])).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
     expect(cars.find(car => car.attributes.includes('aria-label="Focus car 03"'))!.attributes).toContain('aria-pressed="true"');
-    expect(html).not.toMatch(/data-rank|is-ranked|leak-likelihood|leaking car/);
+    expect(html).toContain('ACV model · Not analysed');
+    expect(html).not.toMatch(/data-acv-rank|is-ranked|leak-likelihood|leaking car/);
+  });
+
+  it.each([ids, [...ids].reverse()])('shows returned ACV ranks without rearranging source identities (%s)', (...rankedCars) => {
+    const html = render('acv', {
+      selection: { kind: 'car', carId: '03', ordinal: 1 },
+      visualization: { acv: { rankedCars } },
+    });
+    const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
+    expect(cars.map(car => /aria-label="Focus car ([^"]+)"/.exec(car.attributes)![1])).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
+    expect(html).toContain(`data-acv-first-car="${rankedCars[0]}"`);
+    expect(html).toContain(`ACV model · Car ${rankedCars[0]} ranked first`);
+    expect(html).toContain('ranking does not confirm a leak');
+    expect(html).toContain('data-selected-car="3"');
+    for (const car of cars) {
+      const id = /aria-label="Focus car ([^"]+)"/.exec(car.attributes)![1];
+      const rank = rankedCars.indexOf(id) + 1;
+      expect(car.attributes).toContain(`data-acv-rank="${rank}"`);
+      expect(car.content).toContain(`Rank ${rank}`);
+      expect(car.attributes.includes('is-ranked-first')).toBe(rank === 1);
+      expect(car.attributes.includes('is-selected')).toBe(id === '03');
+      expect(car.attributes.includes('aria-pressed="true"')).toBe(id === '03');
+    }
+    expect(html).not.toMatch(/healthy|confirmed fault|leaking car|confidence|probability/i);
+  });
+
+  it('retains the returned ACV order without suggesting a suspect when thermal data is unusable', () => {
+    const html = render('acv', { visualization: { acv: { rankedCars: ids, hasUsableData: false } } });
+    const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
+    expect(cars).toHaveLength(8);
+    expect(html).toContain(`data-acv-first-car="${ids[0]}"`);
+    expect(html).toContain('ACV model · Insufficient thermal data');
+    for (const car of cars) {
+      const id = /aria-label="Focus car ([^"]+)"/.exec(car.attributes)![1];
+      expect(car.attributes).toContain(`data-acv-rank="${ids.indexOf(id) + 1}"`);
+    }
+    expect(html).not.toMatch(/is-amber|is-ranked-first|most suspected|ranked first/);
   });
 
   it('keeps SHM stress unlocated and disables the pulse under reduced motion', () => {
@@ -95,13 +132,36 @@ describe('rendered subsystem train schematic', () => {
       visualization: { stress: { amplitude: .8, progress: .5, playing: true } },
     });
     expect(html).toContain('data-selected-car=""');
-    expect(html).toContain('Measurement location not supplied');
-    expect(html).toContain('not a measured spatial distribution');
+    expect(html).toContain('Recording-level colour; sensor location unavailable.');
+    expect(html).toContain('data-shm-risk="uncomputed"');
+    expect(html).toContain('SHM model · Not analysed');
+    expect(html).not.toContain('aria-current="true"');
     expect(html).not.toMatch(/is-selected|Predicted damage|remaining life|health %/);
     const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
     expect(cars).toHaveLength(8);
     expect(cars.every(car => car.attributes.includes('disabled=""') && car.attributes.includes('aria-pressed="false"'))).toBe(true);
     expect(html).toContain('--stress-amplitude:0');
+  });
+
+  it.each([[.03275079057348264, 'green'], [.33, 'yellow'], [.816841668231493, 'red'], [1.5, 'red']] as const)('colours all reference cars for SHM output %s, even with reduced motion', (prediction, band) => {
+    const html = render('shm', { visualization: { shm: { prediction }, stress: { amplitude: .8, progress: .5, playing: true } } });
+    const cars = buttons(html).filter(button => button.attributes.includes('reference-fallback__car'));
+    expect(cars).toHaveLength(8);
+    expect(cars.every(car => car.attributes.includes(`data-shm-risk="${band}"`))).toBe(true);
+    expect(html).toContain('<aside class="reference-shm-legend" aria-label="SHM risk legend">');
+    expect(html).toContain(`data-band="${band}" aria-current="true"`);
+    expect(html.match(/aria-current="true"/g)).toHaveLength(1);
+    expect(html).toContain(`<output aria-label="SHM fatigue damage">${String(prediction)}</output>`);
+    expect(html).toContain('--stress-amplitude:0');
+    expect(html).toContain('Recording-level colour; sensor location unavailable.');
+    expect(html.includes('Above the displayed 0–1 range')).toBe(prediction > 1);
+  });
+
+  it.each([undefined, -1, NaN, Infinity])('clears SHM train colour and the current legend marker for unavailable output %s', prediction => {
+    const html = render('shm', { visualization: prediction === undefined ? undefined : { shm: { prediction } } });
+    expect(html).toContain('data-shm-risk="uncomputed"');
+    expect(html).not.toContain('aria-current="true"');
+    expect(buttons(html).filter(button => button.attributes.includes('reference-fallback__car')).every(car => !car.attributes.includes('data-shm-risk'))).toBe(true);
   });
 
   it('shows an illustrative Door movement and reveals its classification only on completion', () => {

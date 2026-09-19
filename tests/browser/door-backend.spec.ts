@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 import type { DoorAnalysis } from '../../src/lib/railwitnessDoorClient';
 
-const api = process.env.VITE_DOOR_API_URL || 'http://127.0.0.1:8000';
+const api = process.env.VITE_API_URL || process.env.VITE_DOOR_API_URL || 'http://127.0.0.1:8000';
 const source = readFileSync(resolve('tests/fixtures/recordings/door-controller.csv'), 'utf8').trim().split(/\r?\n/);
 // A small synthetic multi-cycle recording for integration behavior, not model accuracy.
 const synthetic = Buffer.from([source[0], ...Array.from({ length: 3 }, (_, cycle) => source.slice(1).map((row, index) => {
@@ -28,7 +28,8 @@ test.beforeEach(async ({ page }) => { await page.emulateMedia({ reducedMotion: '
 
 test('Door upload uses frozen API, displays every cycle, and downloads the exact backend CSV and ZIP', async ({ page, request }) => {
   const analysis = await analyseDoor(page);
-  expect(analysis.model_name).toBe('logistic_regression');
+  expect(analysis.model_name).toBe('logistic_regression_5_current_features');
+  expect(analysis.model_id).toBe('door5-6d2171ee2079dd86');
   expect(analysis.summary.rows).toBe(9);
   await expect(result(page).locator('tbody tr')).toHaveCount(analysis.summary.cycles);
   for (const [index, segment] of analysis.segments.entries()) {
@@ -52,8 +53,11 @@ test('Door upload uses frozen API, displays every cycle, and downloads the exact
   expect(readFileSync((await csv.path())!)).toEqual(expectedCsv);
   await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: 'ACV', exact: true }).click();
   await page.getByLabel('Upload recording files').setInputFiles(resolve('tests/fixtures/recordings/acv-basic.xlsx'));
-  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeDisabled();
-  await expect(result(page)).toContainText('Waiting for trained model package');
+  await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeEnabled();
+  await expect(result(page)).toContainText('Recording ready for analysis');
+  await expect(page.getByRole('button', { name: /predictions.zip/ })).toBeDisabled();
+  await page.getByRole('navigation', { name: 'Subsystems' }).getByRole('button', { name: 'Doors', exact: true }).click();
+  await expect(result(page)).toContainText('3 door cycles classified');
   const archivePending = page.waitForEvent('download');
   const zipResponse = page.waitForResponse(response => response.url() === `${api}${analysis.downloads.zip}`);
   await page.getByRole('button', { name: /predictions.zip/ }).click();

@@ -99,7 +99,7 @@ test('SHM stress inspection stays unlocated, respects reduced motion, and waits 
   await page.getByLabel('Upload recording files').setInputFiles({ name: 'test99.csv', mimeType: 'text/csv', buffer: readFileSync(resolve(fixtures, 'shm-stress.csv')) });
   await expect(page.getByRole('button', { name: 'Run analysis', exact: true })).toBeEnabled();
   await expect(page.locator('.reference-train-scene')).toHaveAttribute('data-selected-car', '');
-  await expect(page.locator('.reference-train-scene')).toContainText('physical sensor location unavailable');
+  await expect(page.locator('.reference-train-scene')).toContainText('sensor location unavailable');
   await expect(page.locator('.multi-shell')).toHaveAttribute('data-reduced-motion', 'true');
   await expect(page.locator('.ms-damage')).toHaveCount(0);
   await page.locator('.ms-stress-disclosure > summary').click();

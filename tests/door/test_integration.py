@@ -30,10 +30,11 @@ def test_deployment_artifact_is_frozen_and_path_cannot_be_overridden(monkeypatch
     monkeypatch.setenv('RAILWITNESS_MODEL', str(api.ROOT / 'door/validation_model.joblib'))
     assert api.MODEL_PATH == api.ROOT / 'door/door_model.joblib'
     assert hashlib.sha256(api.MODEL_PATH.read_bytes()).hexdigest() == (
-        '077e4a21838857e4b6bb2e5d2c9b9e1c7741a84d00c52a2d41ecb2489750ea7c'
+        '018b6be47a6e8f98aa6e9545bc8b38a0033c311e9d222942eead66d346a03acf'
     )
-    assert api.model()['model_name'] == 'logistic_regression'
-    assert api.model()['model_id'] == '7a34ab10e5140f7e'
+    assert api.model()['model_name'] == 'logistic_regression_5_current_features'
+    assert api.model()['model_id'] == 'door5-6d2171ee2079dd86'
+    assert api.model()['feature_schema'] == 'door_current5_v1'
 
 
 def test_indices_cover_every_source_row_once(synthetic_csv):

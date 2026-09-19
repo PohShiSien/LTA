@@ -1,6 +1,8 @@
 /** Recorded replay and model display state. It never changes an inference result or asset mapping. */
 export interface SubsystemVisualState {
+  acv?: { rankedCars: string[]; hasUsableData?: boolean };
   rail?: { prediction: 'Normal' | 'Side I' | 'Side II' };
+  shm?: { prediction: number };
   door?: {
     cycleNumber: number;
     operation: 'Open' | 'Close' | 'Unknown';

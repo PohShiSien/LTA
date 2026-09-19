@@ -80,10 +80,12 @@ def test_singleton_not_silently_dropped(synthetic_csv):
     s=replace(original,timestamps=original.timestamps[150:302],t_ms=original.t_ms[150:302],x=original.x[150:302])
     with pytest.raises(DataError):GapSegmenter(threshold_ms=200).predict(s)
 
-def test_97_features_no_clock_or_ids(synthetic_csv):
+def test_current5_features_no_clock_or_ids(synthetic_csv):
     s=load_stream(synthetic_csv);segs=GapSegmenter(threshold_ms=200).predict(s)
     x,names=feature_matrix(s,segs)
-    assert x.shape==(2,97)
+    assert x.shape==(2,5)
+    assert names==['moving_current_mean_A','moving_current_q90_A','moving_current_rms_A','current_q10_A','current_median_A']
+    assert names==load_bundle(ROOT/'door/door_model.joblib')['feature_names']
     assert not any(n in names for n in ['timestamp','segment_id','status','operation_label','opening_time','closing_time'])
     assert np.all(np.isfinite(x))
 
@@ -112,13 +114,14 @@ def test_trained_artifact_and_repeatability(synthetic_csv):
     a,segs,x=predict_stream(b,s);c,_,_=predict_stream(b,s)
     assert a['segments']==c['segments'];assert len(segs)==2
     d=cycle_detail(b,s,segs[0],x[0]);assert d['reference'];assert d['explanations'];assert d['points']
-    assert len(d['features'])==97;assert a['segments'][0]['asset_id'] is None
+    assert list(d['features'])==b['feature_names'];assert len(d['features'])==5
+    assert a['segments'][0]['asset_id'] is None
 
 def test_api_round_trip_and_download(synthetic_csv):
     with TestClient(app) as client:
         assert client.get('/').status_code==200
         assert client.get('/api/health').json()['status']=='ok'
-        assert client.get('/api/door/model').json()['feature_count']==97
+        assert client.get('/api/door/model').json()['feature_count']==5
         r=client.post('/api/door/predict',files={'file':('sample.csv',synthetic_csv,'text/csv')})
         assert r.status_code==200,r.text
         result=r.json();assert result['summary']['cycles']==2
@@ -156,5 +159,9 @@ def test_cli_and_api_match(synthetic_csv,tmp_path):
         before=protected.read_bytes()
         blocked=subprocess.run([sys.executable,str(script),'--input',str(source),'--output',str(protected)],capture_output=True,text=True,timeout=30)
         assert blocked.returncode!=0
-        assert 'must not overwrite' in blocked.stderr
+        if protected.suffix=='.csv':
+            assert 'must not overwrite' in blocked.stderr
+        else:
+            # Non-CSV --output arguments are directories in the supplied script.
+            assert 'File exists' in blocked.stderr and str(protected) in blocked.stderr
         assert protected.read_bytes()==before

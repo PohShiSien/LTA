@@ -28,7 +28,7 @@ const modelClient = createModelClient(apiUrl);
 const ReferenceTrainScene = lazy(() => import('../components/train/ReferenceTrainScene'));
 const SUBSYSTEMS = {
   door: { title: 'Door controller', short: 'Doors', icon: Fingerprint, label: 'Cycle detection & resistance', description: 'Inspect the controller stream and its classified opening and closing cycles.', accept: '.csv' },
-  acv: { title: 'Air conditioning', short: 'ACV', icon: Snowflake, label: 'Recorded car conditions', description: 'Compare recorded conditions across the source cars.', accept: '.xlsx,.csv' },
+  acv: { title: 'Air conditioning', short: 'ACV', icon: Snowflake, label: 'Leak inspection priority & recorded car conditions', description: 'Rank the eight cars for ACV inspection and review their recorded evidence.', accept: '.xlsx,.csv' },
   rail: { title: 'Rail corrugation', short: 'Rail corrugation', icon: Waves, label: 'Recording classification & axle-box measurements', description: 'Classify each recording and inspect its vibration and shock measurements.', accept: '.csv' },
   shm: { title: 'Structural health', short: 'Structural health', icon: Activity, label: 'Fatigue damage & recorded dynamic stress', description: 'Estimate fatigue damage for each recording and inspect its stress measurements.', accept: '.csv' },
 } as const;
@@ -59,7 +59,6 @@ function fieldMatches(field: DisplayField, selection: ComponentSelection, subsys
 
 export default function SubsystemWorkspace() {
   const [subsystem, setSubsystem] = useState<Subsystem>(initialLayer);
-  const modelUnavailable = subsystem === 'acv';
   const [sessions, setSessions] = useState(createSessions);
   const [busy, setBusy] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
@@ -88,9 +87,9 @@ export default function SubsystemWorkspace() {
   const recordingKey = recording ? sourceKey(recording) : '';
   const result = session.results[recordingKey] ?? null;
   const doorJob = subsystem === 'door' ? doorJobs[recordingKey] : undefined;
-  const modelJob = subsystem === 'rail' || subsystem === 'shm' ? modelJobs[recordingKey] : undefined;
+  const modelJob = subsystem !== 'door' ? modelJobs[recordingKey] : undefined;
   const hasResult = Boolean(result || modelJob);
-  const recordingModel = subsystem === 'rail' || subsystem === 'shm';
+  const recordingModel = subsystem !== 'door';
   const allModelJobs = session.recordings.flatMap(item => modelJobs[sourceKey(item)] ? [modelJobs[sourceKey(item)]] : []);
   const allAnalysed = session.recordings.length > 0 && allModelJobs.length === session.recordings.length;
   const selectedDoorCycle = result?.segments.length ? doorCycles[recordingKey] ?? 0 : null;
@@ -163,7 +162,7 @@ export default function SubsystemWorkspace() {
   };
   const runAnalysis = async (all = false) => {
     const targetKey = skey;
-    if (operations.current.has(targetKey) || modelUnavailable) return;
+    if (operations.current.has(targetKey)) return;
     operations.current.add(targetKey);
     const targets = all ? session.recordings : recording ? [recording] : [];
     setError('');
@@ -182,8 +181,8 @@ export default function SubsystemWorkspace() {
           setDoorJobs(previous => ({ ...previous, [key]: analysis }));
           setDoorCycles(previous => ({ ...previous, [key]: 0 }));
           patchSession(targetKey, previous => ({ ...previous, results: { ...previous.results, [key]: output } }));
-        } else if (targetKey === 'rail' || targetKey === 'shm') {
-          const analysis = await modelClient.analyse(targetKey, file, item.rowCount);
+        } else {
+          const analysis = await modelClient.analyse(targetKey, file, item.rowCount, item.carIds);
           setModelJobs(previous => ({ ...previous, [key]: analysis }));
         }
       }
@@ -224,7 +223,7 @@ export default function SubsystemWorkspace() {
     if (exporting) return;
     setExporting(true); setError('');
     try {
-      if (subsystem === 'rail' || subsystem === 'shm') {
+      if (subsystem !== 'door') {
         if (!allAnalysed) throw new Error('Run analysis for every loaded recording before exporting all results.');
         downloadFile('predictions.zip', await modelClient.export(subsystem, allModelJobs, 'zip'), 'application/zip');
         setNotice(`All ${config.short} predictions exported from the model backend.`);
@@ -237,7 +236,7 @@ export default function SubsystemWorkspace() {
     finally { setExporting(false); }
   };
   const saveAllCsv = async () => {
-    if ((subsystem !== 'rail' && subsystem !== 'shm') || !allAnalysed || exporting) return;
+    if (subsystem === 'door' || !allAnalysed || exporting) return;
     setExporting(true); setError('');
     try { downloadFile(`${subsystem}_predictions.csv`, await modelClient.export(subsystem, allModelJobs, 'csv'), 'text/csv;charset=utf-8'); }
     catch (reason) { setError((reason as Error).message); }
@@ -284,7 +283,9 @@ export default function SubsystemWorkspace() {
   const stressValue = subsystem === 'shm' && metric && inspected ? numericValue(fieldValue(recording!, metric, row).value) : null;
   const visualization: SubsystemVisualState = {
     door: selectedReplayCycle ? { cycleNumber: selectedReplayCycle.index + 1, operation: selectedReplayCycle.operation, progress: replay.progress, completed: replay.completed, prediction: selectedReplayCycle.prediction } : undefined,
+    acv: modelJob?.subsystem === 'acv' ? { rankedCars: modelJob.prediction, hasUsableData: modelJob.evidence.cars.some(car => car.has_data) } : undefined,
     rail: modelJob?.subsystem === 'rail' ? { prediction: modelJob.prediction } : undefined,
+    shm: modelJob?.subsystem === 'shm' ? { prediction: modelJob.prediction } : undefined,
     stress: subsystem === 'shm' ? { progress: stress.progress, playing: stress.playing, amplitude: Math.min(1, Math.abs(stressValue ?? 0) / (stableSignal?.statistics.peak || 1)) } : undefined,
   };
 
@@ -295,10 +296,9 @@ export default function SubsystemWorkspace() {
       <main id="workspace-content" className="ms-workspace" tabIndex={-1}>
         <div className="ms-page-heading"><div><div className="ms-eyebrow">{config.label}</div><h1>{config.title}</h1><p>{config.description}</p></div><button className="ms-button" disabled={(recordingModel ? !allAnalysed : !exportableDoorJob) || exporting || Boolean(activeBusy)} onClick={() => void saveZip()}><ArrowDownToLine size={14}/>predictions.zip</button></div>
         <section className="ms-source-panel" aria-label="Recording selection" onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={drop} data-dragging={dragging}>
-          <div className="ms-source-controls"><button className="ms-upload" onClick={() => uploadInput.current?.click()} disabled={Boolean(busy[skey])}><Upload size={16}/><span>Upload recording<small>or drop {config.accept.replaceAll('.', '').toUpperCase()} here</small></span></button><input ref={uploadInput} type="file" multiple accept={config.accept} aria-label="Upload recording files" className="ms-file-input" onChange={event => { if (event.target.files) void addFiles(event.target.files); }}/><label className="ms-file-select"><span>SELECTED RECORDING</span><select aria-label="Selected recording" value={session.selectedId ?? ''} onChange={event => selectRecording(event.target.value)}><option value="" disabled>{activeBusy ? 'Preparing recording…' : 'No recording loaded'}</option>{session.recordings.map(item => <option value={sourceKey(item)} key={sourceKey(item)}>{item.source.fileName}{session.recordings.filter(candidate => candidate.source.fileName === item.source.fileName).length > 1 ? ` · source ${item.source.fileId.split(':').at(-1)?.slice(0, 8)}` : ''}</option>)}</select></label>{recording && <button className="ms-button small" aria-label="Remove selected recording" title="Remove selected recording and its result" disabled={Boolean(activeBusy)} onClick={removeRecording}><X size={14}/></button>}<button className="ms-button primary" onClick={() => void runAnalysis()} disabled={!recording || Boolean(activeBusy) || modelUnavailable}>{activeBusy ? <LoaderCircle className="spin" size={14}/> : <Activity size={14}/>}<span>{activeBusy ? 'Processing…' : hasResult ? 'Run again' : 'Run analysis'}</span></button>{session.recordings.length > 1 && <button className="ms-button" onClick={() => void runAnalysis(true)} disabled={Boolean(activeBusy) || modelUnavailable}>Analyse all {session.recordings.length}</button>}<button className="ms-button" onClick={() => void saveCsv()} disabled={!hasResult || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>CSV</button>{recordingModel && session.recordings.length > 1 && <button className="ms-button" onClick={() => void saveAllCsv()} disabled={!allAnalysed || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>All results CSV</button>}</div>
-          <div className="ms-source-context"><Database size={12}/><span>{recording ? `${recording.source.datasetId} / ${recording.source.fileName} · ${recording.rowCount.toLocaleString()} rows · ${recording.fields.length} source fields` : 'Inspect source fields in your browser. Run analysis sends the original file to the model backend.'}</span>{recording && !modelUnavailable && <span className="ms-door-route">Prediction: trained backend model</span>}{activeBusy && <strong role="status">{activeBusy}</strong>}</div>
+          <div className="ms-source-controls"><button className="ms-upload" onClick={() => uploadInput.current?.click()} disabled={Boolean(busy[skey])}><Upload size={16}/><span>Upload recording<small>or drop {config.accept.replaceAll('.', '').toUpperCase()} here</small></span></button><input ref={uploadInput} type="file" multiple accept={config.accept} aria-label="Upload recording files" className="ms-file-input" onChange={event => { if (event.target.files) void addFiles(event.target.files); }}/><label className="ms-file-select"><span>SELECTED RECORDING</span><select aria-label="Selected recording" value={session.selectedId ?? ''} onChange={event => selectRecording(event.target.value)}><option value="" disabled>{activeBusy ? 'Preparing recording…' : 'No recording loaded'}</option>{session.recordings.map(item => <option value={sourceKey(item)} key={sourceKey(item)}>{item.source.fileName}{session.recordings.filter(candidate => candidate.source.fileName === item.source.fileName).length > 1 ? ` · source ${item.source.fileId.split(':').at(-1)?.slice(0, 8)}` : ''}</option>)}</select></label>{recording && <button className="ms-button small" aria-label="Remove selected recording" title="Remove selected recording and its result" disabled={Boolean(activeBusy)} onClick={removeRecording}><X size={14}/></button>}<button className="ms-button primary" onClick={() => void runAnalysis()} disabled={!recording || Boolean(activeBusy)}>{activeBusy ? <LoaderCircle className="spin" size={14}/> : <Activity size={14}/>}<span>{activeBusy ? 'Processing…' : hasResult ? 'Run again' : 'Run analysis'}</span></button>{session.recordings.length > 1 && <button className="ms-button" onClick={() => void runAnalysis(true)} disabled={Boolean(activeBusy)}>Analyse all {session.recordings.length}</button>}<button className="ms-button" onClick={() => void saveCsv()} disabled={!hasResult || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>CSV</button>{recordingModel && session.recordings.length > 1 && <button className="ms-button" onClick={() => void saveAllCsv()} disabled={!allAnalysed || exporting || Boolean(activeBusy)}><ArrowDownToLine size={14}/>All results CSV</button>}</div>
+          <div className="ms-source-context"><Database size={12}/><span>{recording ? `${recording.source.datasetId} / ${recording.source.fileName} · ${recording.rowCount.toLocaleString()} rows · ${recording.fields.length} source fields` : 'Inspect source fields in your browser. Run analysis sends the original file to the model backend.'}</span>{recording && <span className="ms-door-route">Prediction: trained backend model</span>}{activeBusy && <strong role="status">{activeBusy}</strong>}</div>
         </section>
-        {modelUnavailable && <div className="ms-model-availability unavailable" role="status"><strong>{config.short} model integration pending</strong><p>You can inspect uploaded recordings. Prediction will be available when this subsystem’s trained model is connected.</p></div>}
         {error && <div className="ms-error" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError('')}><X size={15}/></button></div>}
         {recording?.warnings.length ? <details className="ms-source-warnings"><summary><CircleHelp size={12}/>{recording.warnings.length} source note{recording.warnings.length === 1 ? '' : 's'}<ChevronDown size={12}/></summary>{recording.warnings.map(warning => <p key={warning}>{warning}</p>)}</details> : null}
         <section id="subsystem-train" className="ms-train-panel" aria-label="Eight-car reference workspace"><div className="ms-scene-heading"><div><span className="ms-eyebrow">01 · WHAT WAS ANALYSED</span><h2>{subsystem === 'door' ? 'Recorded door movements' : subsystem === 'acv' ? 'Eight cars. Recorded conditions.' : subsystem === 'rail' ? 'Follow the evidence to the rail side.' : 'Stress in context.'}</h2><p>{subsystem === 'door' ? 'Illustrative location; physical asset metadata unavailable' : subsystem === 'shm' ? 'Reference layout — asset mapping not supplied' : subsystem === 'acv' ? recording ? 'Stable labelled schematic order · car identities are preserved from this file' : 'Select a case to discover its exact car identifiers · schematic placeholders shown' : '64 axle boxes · 128 measurement channels · two reference rail sides'}</p></div><div className="ms-scene-controls"><label><input type="checkbox" checked={xray} onChange={event => setXray(event.target.checked)}/>X-ray</label><button className="ms-button small" onClick={() => { selectComponent({ kind: 'recording' }); setFitKey(value => value + 1); }}><Focus size={13}/>Fit train</button></div></div>
@@ -310,7 +310,7 @@ export default function SubsystemWorkspace() {
           <nav className="ms-car-navigator" aria-label="Carriage navigator"><span>REFERENCE CARS</span>{carIds.map((id, index) => <button key={`${id}-${index}`} className={ordinal === index + 1 ? 'active' : ''} aria-label={`Select car ${id}`} aria-pressed={ordinal === index + 1} onClick={() => selectComponent({ kind: 'car', carId: id, ordinal: index + 1 })}><TrainFront size={13}/><strong>{id}</strong></button>)}</nav>
           <div className="ms-scene-note"><span><span className="ms-kind metadata">Metadata</span>{subsystem === 'rail' ? 'Reference travel: −X. Side I = −Z; Side II = +Z. Camera rotation does not change channel identity.' : 'Drawn geometry is schematic. Dataset recordings do not establish a shared physical train or timeline.'}</span><label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)}/>Reduce motion</label></div>
         </section>
-        <ResultSummary result={result} recording={recording} onCycle={selectDoorCycle} doorAnalysis={doorJob} modelAnalysis={modelJob} selectedCycle={selectedDoorCycle} modelUnavailable={modelUnavailable} concealReplay={Boolean(selectedReplayCycle && (!replay.completed || replay.playing))}/>
+        <ResultSummary result={result} recording={recording} onCycle={selectDoorCycle} onCar={carId => selectComponent({ kind: 'car', carId, ordinal: carIds.indexOf(carId) + 1 })} doorAnalysis={doorJob} modelAnalysis={modelJob} selectedCycle={selectedDoorCycle} concealReplay={Boolean(selectedReplayCycle && (!replay.completed || replay.playing))}/>
         {doorJob && <div id="door-cycle-evidence"><DoorCycleEvidence detail={doorEvidence.detail} loading={doorEvidence.loading} error={doorEvidence.error} sourceName={doorJob.source_name} cycleNumber={selectedDoorCycle === null ? null : selectedDoorCycle + 1} onRetry={doorEvidence.retry} replayProgress={replay.progress} concealResult={!replay.completed}/></div>}
         {subsystem === 'shm' && recording && <details className="ms-stress-disclosure" onToggle={event => { if (!event.currentTarget.open) stress.pause(); }}>
           <summary>Optional stress playback<ChevronDown size={14}/></summary>
@@ -334,6 +334,6 @@ export default function SubsystemWorkspace() {
       </main>
     </div>
     {notice && <div className="ms-notice" role="status"><Check size={14}/>{notice}</div>}
-    <dialog className="ms-dialog" ref={helpRef} onClose={() => setShowHelp(false)} onClick={event => { if (event.target === event.currentTarget) setShowHelp(false); }}><div><header><h2>One workspace. Four independent sources.</h2><button aria-label="Close help" onClick={() => setShowHelp(false)}><X size={17}/></button></header><ol><li>Select the subsystem that matches your recording.</li><li>Upload CSV or ACV XLSX data. Run analysis when the subsystem’s trained model is connected.</li><li>Select a relevant car, axle box or unlocated stream to inspect actual recorded fields.</li><li>Use the sample cursor, metric selector and pinned fields to review evidence.</li><li>Download the selected result as CSV. For Rail and SHM, analyse all loaded recordings to download their combined CSV or predictions.zip.</li></ol><p>Door results classify detected cycles. Rail returns a classification per recording; SHM returns a fatigue damage estimate per recording. No shared train identity or synchronized timeline is implied.</p><p>Door, Rail and SHM predictions run on the supplied models in the backend. ACV recordings can be inspected while its model awaits integration. For Door, the ZIP uses the currently selected analysed stream because its required CSV has no file identifier column.</p><button className="ms-button primary" onClick={() => setShowHelp(false)}>Return to workspace</button></div></dialog>
+    <dialog className="ms-dialog" ref={helpRef} onClose={() => setShowHelp(false)} onClick={event => { if (event.target === event.currentTarget) setShowHelp(false); }}><div><header><h2>One workspace. Four independent sources.</h2><button aria-label="Close help" onClick={() => setShowHelp(false)}><X size={17}/></button></header><ol><li>Select the subsystem that matches your recording.</li><li>Upload CSV or ACV XLSX data. Run analysis to apply the subsystem’s supplied trained model.</li><li>Select a relevant car, axle box or unlocated stream to inspect actual recorded fields.</li><li>Use the sample cursor, metric selector and pinned fields to review evidence.</li><li>Download the selected result as CSV. For ACV, Rail and SHM, analyse all loaded recordings to download their combined CSV or predictions.zip.</li></ol><p>Door results classify detected cycles. ACV ranks the eight cars for inspection; Rail returns a classification per recording; SHM returns a fatigue damage estimate per recording. No shared train identity or synchronized timeline is implied.</p><p>All four subsystems run their supplied models in the backend. ACV ranks cars under the model’s one-leaking-car-per-case assumption; the result is an inspection priority, not a confirmed diagnosis. For Door, the ZIP uses the currently selected analysed stream because its required CSV has no file identifier column.</p><button className="ms-button primary" onClick={() => setShowHelp(false)}>Return to workspace</button></div></dialog>
   </div>;
 }
