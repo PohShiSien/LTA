@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import argparse
 import csv
 import datetime as dt
@@ -7,7 +8,6 @@ import io
 import json
 import math
 import platform
-import sys
 import zipfile
 from pathlib import Path
 
@@ -17,7 +17,7 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_MODEL = HERE / 'shm_model.joblib'
-VERSION = 'rw-trained-2026-09-19-v2'
+VERSION = 'shm-reference-recipe-2026-09-19'
 FORMAT_VERSION = 1
 MODEL_NAME = 'rainflow_miner_reference_recipe'
 
@@ -43,7 +43,7 @@ class DataError(ValueError):
     """Actionable input validation error."""
 
 
-# ---- feature extraction (mirrored step for step by src/lib/inference.ts in the app) --------------
+# ---- feature extraction -------------------------------------------------------------------------
 def summary(values):
     a = np.asarray(values, dtype=float)
     d = np.diff(a)
@@ -99,8 +99,9 @@ def shm_rainflow_ranges(values, classes=SHM_LOAD_CLASSES):
 
 
 def shm_range_histogram(ranges, bins=SHM_RANGE_BINS):
-    """Equal-width histogram over [min, max] -> (counts, centres). A value within SHM_EDGE_EPSILON bin widths
-    below an edge belongs to the upper bin, so Python and the browser agree on exact-edge values."""
+    """Equal-width histogram over [min, max] -> (counts, centres). Because counted ranges are whole multiples of
+    the class width, many fall exactly on bin edges; a value within SHM_EDGE_EPSILON bin widths below an edge is
+    assigned to the upper bin so the result does not depend on last-digit floating-point differences."""
     r = np.asarray(ranges, dtype=float)
     lo, hi = float(r.min()), float(r.max())
     if not bins or hi <= lo:
@@ -151,7 +152,7 @@ def cycle_evidence(data):
 
 # ---- loading ------------------------------------------------------------------------------------
 def load_series(path: Path) -> tuple[np.ndarray, list[str]]:
-    """One stress column. A single non-numeric first line (a real header) is dropped, as the app does."""
+    """One stress column. A single non-numeric first line (a real header) is dropped; anything else non-numeric is an error."""
     table = pd.read_csv(path, header=None, dtype=str, skip_blank_lines=True)
     if table.shape[1] != 1:
         raise DataError(f'{path.name}: SHM recordings must have exactly one stress column')
@@ -201,9 +202,9 @@ def repeated_kfold(y, s, k=5, reps=20, seed=0):
     return float(np.mean(scores)), float(np.std(scores))
 
 
-def evaluate_artifact(artifact: dict, features) -> float:
-    """The app's log-linear evaluation: D = exp(intercept + sum(coef * (f - mean) / scale))."""
-    z = artifact['intercept'] + sum((v - m) / s * c for v, m, s, c in zip(features, artifact['mean'], artifact['scale'], artifact['coefficients']))
+def evaluate_linear_model(model: dict, features) -> float:
+    """D = exp(intercept + sum(coef * (f - mean) / scale)) over the feature vector."""
+    z = model['intercept'] + sum((v - m) / s * c for v, m, s, c in zip(features, model['mean'], model['scale'], model['coefficients']))
     damage = math.exp(z)
     if not math.isfinite(damage):
         raise DataError('The damage model returned a non-finite value for this recording.')
@@ -237,7 +238,7 @@ def train(datasets: Path, verbose=False):
     if len(set(lengths)) > 1:
         print(f'WARNING: training files differ in length ({sorted(set(lengths))}); damage is per segment and is not length-normalised', flush=True)
 
-    s = np.expm1(x[:, SHM_DAMAGE_FEATURE])           # S5 exactly as the app recomputes it from log1p
+    s = np.expm1(x[:, SHM_DAMAGE_FEATURE])           # S5 recovered from its log1p feature
     k = mape_optimal_scale(y, s)
     fitted = k * s
     held = leave_one_out(y, s)
@@ -255,24 +256,22 @@ def train(datasets: Path, verbose=False):
         for i in np.argsort(residual_pct):
             print(f'  {names[i]:12s} label={y[i]:.6f} pred={fitted[i]:.6f} resid={residual_pct[i]:+.3f}% loo={100*held[i]:.3f}%')
 
+    # Standardised linear form of the fitted model: log D = log k + log1p(S5).
     mean = x.mean(axis=0)
     scale = np.where(x.std(axis=0) > 0, x.std(axis=0), 1.0)
     coefficients = np.zeros(x.shape[1]); coefficients[SHM_DAMAGE_FEATURE] = scale[SHM_DAMAGE_FEATURE]
     intercept = float(math.log(k) + mean[SHM_DAMAGE_FEATURE])
-    artifact = {'kind': 'log-linear', 'mean': mean.tolist(), 'scale': scale.tolist(), 'coefficients': coefficients.tolist(),
-                'intercept': intercept, 'featureCount': int(x.shape[1]),
-                'info': {'version': VERSION, 'name': 'SHM rainflow–Miner damage (reference recipe)',
-                         'description': 'Cumulative damage D = k · Σ count·range⁵ from four-point rainflow counting (64 load classes, residual closed against itself, 64 range bins). One calibration constant; no learned features, no physical location inference.',
-                         'training': f'{len(y)} labelled healthy-condition stress recordings; k is the MAPE-optimal scale (weighted median of damage/range-moment). File identifiers are excluded.',
-                         'validation': f'Leave-one-out over all {len(y)} files: MAPE {held.mean():.3%}, score max(0, 1−MAPE) {max(0.0, 1 - held.mean()):.4f}; {exact}/{len(y)} training labels reproduced to 0.005%. Healthy-condition data only; no fault classification or lifetime estimate.'}}
-    for i in range(len(y)):   # the artifact must reproduce k*(1+S5) for every training file
-        if abs(evaluate_artifact(artifact, x[i]) / (k * (1 + s[i])) - 1) > 1e-12:
-            raise RuntimeError('artifact does not reproduce the fitted model')
+    linear_model = {'kind': 'log-linear', 'mean': mean.tolist(), 'scale': scale.tolist(), 'coefficients': coefficients.tolist(),
+                    'intercept': intercept, 'featureCount': int(x.shape[1])}
+    for i in range(len(y)):   # the linear form must reproduce k*(1+S5) for every training file
+        if abs(evaluate_linear_model(linear_model, x[i]) / (k * (1 + s[i])) - 1) > 1e-12:
+            raise RuntimeError('linear form does not reproduce the fitted model')
     generated = dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')
     bundle = {'format_version': FORMAT_VERSION, 'model_id': model_id(k), 'model_name': MODEL_NAME, 'version': VERSION,
+              'description': 'Cumulative damage D = k · Σ count·range⁵ from four-point rainflow counting (first sample skipped, 64 load classes, residual closed against itself, 64 range bins). One calibration constant; no learned features.',
               'recipe': RECIPE, 'feature_names': FEATURE_NAMES,
               'calibration': {'k': k, 'log_k': float(math.log(k)), 'method': 'MAPE-optimal scale: weighted median of label/S5 with weights S5/label (exact minimiser of MAPE for D = k·S5)'},
-              'browser_artifact': artifact, 'validation': metrics,
+              'linear_model': linear_model, 'validation': metrics,
               'training': {'n_files': int(len(y)), 'files': names, 'samples_per_file': int(lengths[0]) if len(set(lengths)) == 1 else None,
                            'range_moment_5_min': float(s.min()), 'range_moment_5_max': float(s.max()),
                            'labels_filename': labels_path.name, 'labels_sha256': sha256_of(labels_path),
@@ -283,7 +282,7 @@ def train(datasets: Path, verbose=False):
     report = {'split': f'leave-one-out, {len(y)} folds (one constant fitted per fold); repeated 5-fold x20 for spread', 'metrics': metrics,
               'recipe': RECIPE, 'modelId': bundle['model_id'], 'heldOutFiles': names,
               'residualPercent': {name: round(float(r), 4) for name, r in zip(names, residual_pct)}, 'trainedAt': generated,
-              'parityFixture': {'features': x[0].tolist(), 'prediction': evaluate_artifact(artifact, x[0])}}
+              'referenceCase': {'file': names[0], 'features': x[0].tolist(), 'prediction': evaluate_linear_model(linear_model, x[0]), 'label': float(y[0])}}
     return bundle, report
 
 
@@ -297,7 +296,7 @@ def load_bundle(path: Path) -> dict:
     path = Path(path)
     if not path.is_file():
         raise DataError(f'Model not found at {path}. Run `python {Path(__file__).name} train --datasets ...` first.')
-    bundle = joblib.load(path)   # local, trusted artifact only
+    bundle = joblib.load(path)   # local, trusted file only
     if bundle.get('format_version') != FORMAT_VERSION or bundle.get('model_name') != MODEL_NAME:
         raise DataError('Unsupported SHM model format.')
     if bundle['recipe'] != RECIPE or bundle['feature_names'] != FEATURE_NAMES:
@@ -307,7 +306,7 @@ def load_bundle(path: Path) -> dict:
 
 def predict_values(bundle: dict, values: np.ndarray, warnings=()) -> dict:
     features = shm_features(values)
-    damage = evaluate_artifact(bundle['browser_artifact'], features)
+    damage = evaluate_linear_model(bundle['linear_model'], features)
     evidence = cycle_evidence(values)
     warnings = list(warnings)
     expected = bundle['training']['samples_per_file']
@@ -331,13 +330,6 @@ def predictions_csv(rows) -> str:
 
 
 # ---- command line -------------------------------------------------------------------------------
-def write_json(path: Path, key, value, indent=None):
-    data = json.loads(path.read_text()) if path.exists() else {}
-    data[key] = value
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=indent, separators=(',', ':') if indent is None else None, allow_nan=False))
-
-
 def cmd_train(args):
     bundle, report = train(args.datasets, verbose=args.verbose)
     if args.no_write:
@@ -347,25 +339,13 @@ def cmd_train(args):
     reloaded = load_bundle(path)
     first = Path(args.datasets) / 'SHM/Train' / bundle['training']['files'][0]
     check = predict_values(reloaded, load_series(first)[0])['prediction']
-    if abs(check / report['parityFixture']['prediction'] - 1) > 1e-12:
+    if abs(check / report['referenceCase']['prediction'] - 1) > 1e-12:
         raise RuntimeError('saved bundle does not reproduce the trainer prediction')
     print(f'wrote {path} (model_id {bundle["model_id"]}, k={bundle["calibration"]["k"]:.6e}, LOO MAPE {bundle["validation"]["mape"]:.4%})', flush=True)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
         print(f'wrote {args.report}', flush=True)
-    if args.export_app:
-        root = args.export_app
-        write_json(root / 'src/data/modelArtifacts.json', 'shm', bundle['browser_artifact'])
-        write_json(root / 'docs/model-validation.json', 'shm', {k: v for k, v in report.items() if k != 'parityFixture'}, indent=2)
-        write_json(root / 'tests/fixtures/model-parity.json', 'shm', report['parityFixture'])
-        parity = root / 'tests/fixtures/feature-parity.json'
-        if parity.exists():
-            data = json.loads(parity.read_text())
-            rows = data.get('shm', {}).get('rows') or [[v] for v in range(15)]
-            data['shm'] = {'rows': rows, 'features': shm_features(np.asarray(rows, dtype=float)).tolist()}
-            parity.write_text(json.dumps(data, separators=(',', ':'), allow_nan=False))
-        print(f'exported browser artifact and fixtures under {root} (src/lib/inference.ts must implement this recipe; run npm test)', flush=True)
 
 
 def cmd_predict(args):
@@ -407,7 +387,6 @@ def main():
     t.add_argument('--datasets', type=Path, required=True, help='Path to 02_Datasets (containing SHM/Train and SHM/Train_Labels.csv)')
     t.add_argument('--model', type=Path, default=DEFAULT_MODEL, help='Output bundle path (default: shm_model.joblib next to this script)')
     t.add_argument('--report', type=Path, help='Optional JSON validation report with per-file residuals')
-    t.add_argument('--export-app', type=Path, metavar='REPO_ROOT', help='Also write the browser artifact and parity fixtures into the RailWitness repository at this root')
     t.add_argument('--no-write', action='store_true', help='Validate only; write nothing')
     t.add_argument('--verbose', action='store_true', help='Print per-file residuals')
     t.set_defaults(run=cmd_train)
